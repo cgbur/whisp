@@ -11,18 +11,18 @@ seamless speech-to-text functionality across all your desktop applications.
 
 These are aspirational, as no code has been written yet at the time of this README.
 
-1. **Robust**: Broken tools are not useful. Whisp will be stable and reliable.
-   Errors will be handled gracefully, and retries will be automatic when
-   possible.
+1. **Robust**: Broken tools are not useful. Whisp is stable and reliable. Errors
+   are handled gracefully, and retries are automatic when possible.
 
-2. **Minimal**: Resource intensive tools or ones that impact a system are the
-   first to be uninstalled. No bloat. No unnecessary features.
+2. **Minimal**: Resource intensive tools with many features and poor execution
+   are not useful. Whisp will be lightweight and unobtrusive. It will do this one
+   thing, and do it well.
 
-3. **Secure**: Handling users API keys, voice data, and registing a
-   global hotkey to enable recordings are not only security concerns, but also
-   is a lot of trust to put in a tool from the internet. The code will handle
-   your data with best practices, but in terms of trust, the best you can do is
-   review the source and build it yourself.
+3. **Secure**: Handling API keys, voice data, and registering a global
+   hotkey to enable recordings are not only security concerns but also require a
+   lot of trust in a tool from the internet. Whisp handles your data with best
+   practices, but in terms of trust, the best you can do is review the source
+   and build it yourself.
 
 ### TODO
 
