@@ -1,27 +1,35 @@
 # Whisp
 
-Whisp is a robust, minimal, and secure speech-to-text application that runs in
-the background, allowing users to dictate text into any application that accepts
-keyboard input. Designed to be lightweight and unobtrusive, Whisp aims to
-seamlessly integrate into the user's workflow.
+Whisp is a lightweight desktop speech-to-text tool designed for simplicity and
+efficiency. Modern speech-to-text models like [OpenAI's
+Whisper](https://github.com/openai/whisper) offer impressive accuracy and
+represent a significant improvement in usability over older technologies. Whisp
+aims to provide a minimal, unobtrusive interface to these models, allowing
+seamless speech-to-text functionality across all your desktop applications.
 
-**Goals**
+### Goals
 
-These are aspirational, as not a single line of code has been written at the
-time of this README.
+These are aspirational, as no code has been written yet at the time of this README.
 
-1. **Robust**: Tools should be dependable and work as expected. Downtime in
-   services should have fallbacks. Whisp will gracefully handle errors and retry
-   when possible. Downtime in a tool like this is extremely frustrating and can be
-   especially disruptive to users who rely on it. _It aspires to be relied upon._
+1. **Robust**: Broken tools are not useful. Whisp will be stable and reliable.
+   Errors will be handled gracefully, and retries will be automatic when
+   possible.
 
-2. **Minimal**: Whisp should be lightweight and unobtrusive. When not in use, it
-   should not activate the microphone or consume system resources. When in use, it
-   should use as few resources as possible. Whisp will focus on providing a clean
-   desktop experience without unnecessary features, UI, or configuration.
+2. **Minimal**: Resource intensive tools or ones that impact a system are the
+   first to be uninstalled. No bloat. No unnecessary features.
 
-3. **Secure**: By its very nature, this tool will handle users' voice data and
-   may, if configured, send it to a third-party service for transcription. Users
-   are installing an application they did not necessarily write and are trusting it
-   with their data. Minimal dependencies, open source, and easy-to-audit code are
-   all important to ensure that users can trust the application.
+3. **Secure**: Handling users API keys, voice data, and registing a
+   global hotkey to enable recordings are not only security concerns, but also
+   is a lot of trust to put in a tool from the internet. The code will handle
+   your data with best practices, but in terms of trust, the best you can do is
+   review the source and build it yourself.
+
+### TODO
+
+- Support configuring the hotkey for start/stop listening
+  - Set a default hotkey
+  - Define the configuration file location
+- Implement start and stop recording functionality
+- Send audio for transcription
+- Auto-paste transcriptions
+- Add a basic settings window
