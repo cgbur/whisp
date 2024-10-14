@@ -1,0 +1,28 @@
+[package]
+name = "whisp"
+version = "0.1.0"
+edition = "2021"
+description = "Robust, minimal, and secure speech-to-text."
+license = "MIT"
+repository = "https://github.com/cgbur/whisp"
+homepage = "https://github.com/cgbur/whisp"
+documentation = "https://docs.rs/whisp"
+keywords = ["speech-to-text", "transcribe", "dictation"]
+# categories = []
+readme = "README.md"
+
+[[bin]]
+path = "src/whisp.rs"
+name = "whisp"
+
+[dependencies]
+anyhow = "1.0.89"
+global-hotkey = "0.6.2"
+image = { version = "0.25.2", default-features = false, features = ["png"] }
+tao = "0.30.3"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tray-icon = "0.19.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10.0"
