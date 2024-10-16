@@ -1,17 +1,22 @@
+mod audio;
+mod config;
+
 use std::path::Path;
 
 use anyhow::Context;
+use config::{Config, ConfigManager};
 use global_hotkey::hotkey::{HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
 
+const APP_NAME: &str = "whisp";
 const DEFAULT_LOG_LEVEL: &str = "info";
-const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/icon.png");
+const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> anyhow::Result<()> {
@@ -22,6 +27,14 @@ fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| EnvFilter::new(DEFAULT_LOG_LEVEL)),
         )
         .init();
+
+    // Load the configuration and save back to create the file if it doesn't
+    // exist. This will create an empty one for editing.
+    let config_manager = ConfigManager::new()?;
+    info!(config_path=%config_manager.config_path().display(), "Configuration path");
+    let config = config_manager.load()?;
+    info!("Loaded configuration: {:?}", config);
+    config_manager.save(&config)?;
 
     // Create the tray menu
     let tray_menu = Menu::new();
