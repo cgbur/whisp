@@ -107,7 +107,7 @@ impl ConfigManager {
     /// Determines the default path to the configuration file using `dirs::config_dir`.
     pub fn default_config_path() -> Result<PathBuf> {
         let config_dir = config_dir().context("Failed to retrieve configuration directory")?;
-        Ok(config_dir.join(format!("{}.toml", APP_NAME)))
+        Ok(config_dir.join("whisp").join(format!("{}.toml", APP_NAME)))
     }
 
     /// Loads the configuration from the config file or returns the default configuration.
