@@ -27,7 +27,20 @@ These are aspirational, as no code has been written yet at the time of this READ
 ## Status
 
 It is working, but bare bones. Using day to day to gather feedback and improve
-in free time.
+in free time. Currently it only supports OpenAI's api.
+
+Basic configuration in `whisp.toml`:
+
+Hotkeys are really bad right now, need to make custom hotkey parser.
+
+```toml
+hotkey = "shift+super+Semicolon"
+openai_key = "not-a-real-key"
+language = "en"
+model = "whisper-1"
+restore_clipboard = true
+auto_paste = false
+```
 
 ### TODO
 
@@ -41,3 +54,4 @@ in free time.
 - Add audio pre-filter to remove dead air (saves money, smaller uploads etc.)
 - Very difficult to test, need to figure out how to do this.
 - Set up basic CI/CD, releases, etc.
+- Support other models/APIs
