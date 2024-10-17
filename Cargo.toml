@@ -2,13 +2,13 @@
 name = "whisp"
 version = "0.1.0"
 edition = "2021"
-description = "Robust, minimal, and secure speech-to-text."
+description = "Unobtrusive global speech-to-text"
 license = "MIT"
 repository = "https://github.com/cgbur/whisp"
 homepage = "https://github.com/cgbur/whisp"
 documentation = "https://docs.rs/whisp"
 keywords = ["speech-to-text", "transcribe", "dictation"]
-# categories = []
+categories = ["accessibility", "productivity"]
 readme = "README.md"
 
 [[bin]]
@@ -39,7 +39,6 @@ core-foundation = "0.10.0"
 
 [dev-dependencies]
 tempfile = "3.13.0"
-
 
 [profile.release-lto]
 inherits = "release"
