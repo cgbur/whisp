@@ -39,3 +39,5 @@ in free time.
 - Document settings
 - Add post processing
 - Add audio pre-filter to remove dead air (saves money, smaller uploads etc.)
+- Very difficult to test, need to figure out how to do this.
+- Set up basic CI/CD, releases, etc.
