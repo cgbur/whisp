@@ -8,7 +8,7 @@ repository = "https://github.com/cgbur/whisp"
 homepage = "https://github.com/cgbur/whisp"
 documentation = "https://docs.rs/whisp"
 keywords = ["speech-to-text", "transcribe", "dictation"]
-categories = ["accessibility", "productivity"]
+categories = ["accessibility"]
 readme = "README.md"
 
 [[bin]]
