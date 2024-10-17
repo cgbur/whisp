@@ -9,8 +9,6 @@ seamless speech-to-text functionality across all your desktop applications.
 
 ### Goals
 
-These are aspirational, as no code has been written yet at the time of this README.
-
 1. **Robust**: Broken tools are not useful. Whisp is stable and reliable. Errors
    are handled gracefully, and retries are automatic when possible.
 
