@@ -24,12 +24,18 @@ These are aspirational, as no code has been written yet at the time of this READ
    practices, but in terms of trust, the best you can do is review the source
    and build it yourself.
 
+## Status
+
+It is working, but bare bones. Using day to day to gather feedback and improve
+in free time.
+
 ### TODO
 
-- Support configuring the hotkey for start/stop listening
-  - Set a default hotkey
-  - Define the configuration file location
-- Implement start and stop recording functionality
-- Send audio for transcription
-- Auto-paste transcriptions
-- Add a basic settings window
+- Add indication when mic data starts being recieved. Currently difficult to know when
+  exactly you can start speaking. Would like to have this indication be a visual
+  in the bar.
+- Notifications on errors.
+- Basic settings page
+- Document settings
+- Add post processing
+- Add audio pre-filter to remove dead air (saves money, smaller uploads etc.)
