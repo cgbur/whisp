@@ -1,7 +1,7 @@
 //! Module for accessing, saving, and loading configuration files.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use dirs::config_dir;
@@ -24,7 +24,7 @@ pub struct Config {
     /// if you're concern is someone having arbitrary read to your app files,
     /// you have bigger problems.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    open_ai_key: Option<String>,
+    openai_key: Option<String>,
 
     // Whisper settings, refactor when we support multiple models
     /// Preferred language
@@ -34,11 +34,23 @@ pub struct Config {
     /// Model to use for transcriptions
     #[serde(default, skip_serializing_if = "Option::is_none")]
     model: Option<String>,
+
+    /// Restore the clipboard contents after pasting. This only takes effect
+    /// when we are using the auto-paste feature.
+    #[serde(default, skip_serializing_if = "Config::is_default_restore_clipboard")]
+    restore_clipboard: bool,
+
+    /// Paste contents automatically after transcribing
+    #[serde(
+        default = "default_auto_paste",
+        skip_serializing_if = "Config::is_default_auto_paste"
+    )]
+    auto_paste: bool,
 }
 
 impl PartialEq for Config {
     fn eq(&self, other: &Self) -> bool {
-        self.hotkey == other.hotkey && self.open_ai_key == other.open_ai_key
+        self.hotkey == other.hotkey && self.openai_key == other.openai_key
     }
 }
 
@@ -50,6 +62,10 @@ fn default_hotkey() -> HotKey {
     )
 }
 
+fn default_auto_paste() -> bool {
+    true
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -57,9 +73,11 @@ impl Default for Config {
                 Some(Modifiers::META | Modifiers::SHIFT),
                 global_hotkey::hotkey::Code::Semicolon,
             ),
-            open_ai_key: None,
+            openai_key: None,
             language: None,
             model: None,
+            restore_clipboard: false,
+            auto_paste: default_auto_paste(),
         }
     }
 }
@@ -71,18 +89,29 @@ impl Config {
     }
 
     /// Sets a new OpenAI API key and marks the configuration as modified.
+    #[allow(unused)]
     pub fn set_key_openai(&mut self, key: &str) {
-        self.open_ai_key = Some(key.to_owned());
+        self.openai_key = Some(key.to_owned());
     }
 
     /// Retrieves the OpenAI API key, if set.
     pub fn key_openai(&self) -> Option<&str> {
-        self.open_ai_key.as_deref()
+        self.openai_key.as_deref()
     }
 
     /// Checks if the provided hotkey is the default value.
     fn is_default_hotkey(hotkey: &HotKey) -> bool {
         hotkey == &Self::default().hotkey
+    }
+
+    /// Checks if the provided restore clipboard is the default value.
+    fn is_default_restore_clipboard(restore_clipboard: &bool) -> bool {
+        restore_clipboard == &Self::default().restore_clipboard
+    }
+
+    /// Checks if the provided auto paste is the default value.
+    fn is_default_auto_paste(auto_paste: &bool) -> bool {
+        auto_paste == &Self::default().auto_paste
     }
 
     /// Returns the language configuration.
@@ -93,6 +122,17 @@ impl Config {
     /// Returns the model to use for transcriptions.
     pub fn model(&self) -> Option<&str> {
         self.model.as_deref()
+    }
+
+    /// Restore the clipboard contents after pasting. This only takes effect
+    /// when we are using the auto-paste feature.
+    pub fn restore_clipboard(&self) -> bool {
+        self.restore_clipboard
+    }
+
+    /// Paste contents automatically after transcribing
+    pub fn auto_paste(&self) -> bool {
+        self.auto_paste
     }
 }
 
@@ -110,7 +150,8 @@ impl ConfigManager {
 
     /// Creates a new `ConfigManager` with a specified configuration directory.
     /// Useful for testing with temporary directories.
-    pub fn with_config_dir<P: AsRef<Path>>(dir: P) -> Self {
+    #[cfg(test)]
+    pub fn with_config_dir<P: AsRef<std::path::Path>>(dir: P) -> Self {
         let config_path = dir.as_ref().join(format!("{}.toml", APP_NAME));
         Self { config_path }
     }
@@ -134,6 +175,7 @@ impl ConfigManager {
     }
 
     /// Reloads the configuration and returns `true` if there are changes.
+    #[cfg(test)]
     pub fn reload(&self, current_config: &mut Config) -> Result<bool> {
         let old_config = current_config.clone();
         *current_config = self.load()?;
@@ -161,7 +203,8 @@ impl ConfigManager {
     }
 
     /// Returns the path to the configuration file.
-    pub fn config_path(&self) -> &Path {
+    #[cfg(test)]
+    pub fn config_path(&self) -> &std::path::Path {
         &self.config_path
     }
 }
@@ -187,10 +230,10 @@ mod tests {
 
         let mut config = Config::default();
         config.set_key_openai("test_key");
-        manager.save(&mut config).unwrap();
+        manager.save(&config).unwrap();
 
         let loaded_config = manager.load().unwrap();
-        assert_eq!(loaded_config.open_ai_key, Some("test_key".to_string()));
+        assert_eq!(loaded_config.openai_key, Some("test_key".to_string()));
         assert_eq!(loaded_config.hotkey, Config::default().hotkey);
     }
 
@@ -209,9 +252,11 @@ mod tests {
         // Simulate an external change by directly modifying the config file.
         let external_config = Config {
             hotkey: HotKey::new(Some(Modifiers::CONTROL), global_hotkey::hotkey::Code::KeyA),
-            open_ai_key: Some("external_key".to_string()),
+            openai_key: Some("external_key".to_string()),
             language: Some("en".to_string()),
             model: Some("something-else".to_string()),
+            restore_clipboard: true,
+            auto_paste: true,
         };
         let serialized =
             toml::to_string_pretty(&external_config).expect("Failed to serialize external config");
@@ -250,7 +295,7 @@ mod tests {
         let default_hotkey = Config::default().hotkey();
         assert!(Config::is_default_hotkey(&default_hotkey));
 
-        let mut custom_hotkey = default_hotkey.clone();
+        let mut custom_hotkey = default_hotkey;
         custom_hotkey.key = global_hotkey::hotkey::Code::KeyA;
         assert!(!Config::is_default_hotkey(&custom_hotkey));
     }

@@ -17,8 +17,10 @@ name = "whisp"
 
 [dependencies]
 anyhow = "1.0.89"
+arboard = { version = "3.4.1", default-features = false }
 cpal = "0.15.3"
 dirs = "5.0.1"
+enigo = "0.2.1"
 global-hotkey = { version = "0.6.2", features = ["serde"] }
 hound = "3.5.1"
 image = { version = "0.25.2", default-features = false, features = ["png"] }

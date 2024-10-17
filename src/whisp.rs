@@ -1,19 +1,21 @@
-mod audio;
 mod config;
-mod transcribe;
+mod models;
+mod paste;
+mod process;
+mod record;
 
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use anyhow::{Context, Result};
-use audio::{Recorder, RecordingHandle};
-use config::{Config, ConfigManager};
+use config::ConfigManager;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
+use process::Processor;
+use record::{Recorder, RecordingHandle};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
-use transcribe::Transcriber;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
 
@@ -31,8 +33,24 @@ fn main() -> Result<()> {
         )
         .init();
 
-    let mut state = Arc::new(RwLock::new(State::new()?));
-    let transcriber = Transcriber::new()?;
+    // Load config
+    let config_manager = ConfigManager::new()?;
+    let config = Arc::new(RwLock::new(config_manager.load()?));
+    // save back the config to create the file if it doesn't exist
+    config_manager.save(&config.read().unwrap())?;
+
+    // Set up hotkey
+    let hotkey_manager = GlobalHotKeyManager::new().context("Failed to create hotkey manager")?;
+    hotkey_manager
+        .register(config.read().unwrap().hotkey())
+        .context("Failed to register hotkey")?;
+
+    // Set up recorder
+    let recorder = Recorder::new();
+    let mut active_recording: Option<RecordingHandle> = None;
+
+    // Set up processor for handling audio data
+    let processor = Processor::new(config.clone())?;
 
     // Create the tray menu
     let tray_menu = Menu::new();
@@ -60,8 +78,6 @@ fn main() -> Result<()> {
         .build()
         .run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
-
-            info!("Tick");
 
             if let Event::NewEvents(StartCause::Init) = event {
                 let icon = load_icon(Path::new(ICON_PATH));
@@ -93,101 +109,44 @@ fn main() -> Result<()> {
                     icon_tray.take();
                     *control_flow = ControlFlow::Exit;
                 }
-                println!("{event:?}");
+                // Handle other menu events
             }
 
-            if let Ok(event) = tray_channel.try_recv() {
-                println!("{event:?}");
+            #[expect(clippy::redundant_pattern_matching)]
+            if let Ok(_) = tray_channel.try_recv() {
+                // Handle tray icon events
             }
 
             if let Ok(event) = hotkey_channel.try_recv() {
-                handle_hotkey_event(event, &mut state, &transcriber);
+                if event.id() == config.read().unwrap().hotkey().id()
+                    && event.state() == HotKeyState::Pressed
+                {
+                    match active_recording.take() {
+                        Some(mut recording) => match recording.finish() {
+                            Ok(Some(data)) => {
+                                if processor.submit_audio(data).is_err() {
+                                    error!("Failed to submit audio to processor");
+                                }
+                            }
+                            Ok(None) => {
+                                warn!("Recording finished but no data was recorded");
+                            }
+                            Err(e) => {
+                                error!(error = ?e, "Failed to finish recording");
+                            }
+                        },
+                        None => match recorder.start_recording() {
+                            Ok(handle) => {
+                                active_recording = Some(handle);
+                            }
+                            Err(e) => {
+                                error!(error = ?e, "Failed to start recording");
+                            }
+                        },
+                    }
+                }
             }
         })
-}
-
-struct State {
-    hotkey_manager: GlobalHotKeyManager,
-    config_manager: ConfigManager,
-    config: Config,
-    recorder: Recorder,
-    active_recording: Option<RecordingHandle>,
-    runtime: tokio::runtime::Runtime,
-}
-
-impl State {
-    fn new() -> Result<Self> {
-        // Load config
-        let config_manager = ConfigManager::new()?;
-        info!("Loaded config");
-        let config = config_manager.load().unwrap();
-        info!(config = ?config, "Loaded config");
-        // save back the config to create the file if it doesn't exist
-        config_manager.save(&config)?;
-
-        // Set up hotkey
-        let hotkey_manager =
-            GlobalHotKeyManager::new().context("Failed to create hotkey manager")?;
-        hotkey_manager
-            .register(config.hotkey())
-            .context("Failed to register hotkey")?;
-
-        // Set up recorder
-        let recorder = Recorder::new();
-
-        // Set up tokio runtime
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
-            .enable_all()
-            .build()?;
-
-        Ok(Self {
-            hotkey_manager,
-            config_manager,
-            config,
-            recorder,
-            active_recording: None,
-            runtime,
-        })
-    }
-}
-
-fn handle_hotkey_event(
-    event: GlobalHotKeyEvent,
-    state: &mut Arc<RwLock<State>>,
-    transcriber: &Transcriber,
-) {
-    if event.id() == state.read().unwrap().config.hotkey().id()
-        && event.state() == HotKeyState::Pressed
-    {
-        let mut state = state.write().unwrap();
-        match state.active_recording.take() {
-            Some(mut recording) => match recording.finish() {
-                Ok(Some(data)) => {
-                    eprintln!("Recording finished: {:?}", data.len());
-                    let text = state
-                        .runtime
-                        .block_on(transcriber.transcribe(&state.config, data))
-                        .unwrap();
-                    eprintln!("Transcribed: {:?}", text);
-                }
-                Ok(None) => {
-                    warn!("Recording finished but no data was recorded");
-                }
-                Err(e) => {
-                    error!(error = ?e, "Failed to finish recording");
-                }
-            },
-            None => match state.recorder.start_recording() {
-                Ok(handle) => {
-                    state.active_recording = Some(handle);
-                }
-                Err(e) => {
-                    error!(error = ?e, "Failed to start recording");
-                }
-            },
-        }
-    }
 }
 
 fn load_icon(path: &Path) -> tray_icon::Icon {

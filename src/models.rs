@@ -4,7 +4,6 @@ use std::sync::{Arc, RwLock};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
-use crate::State;
 
 const WHISPER_ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
 const DEFAULT_WHISPER_MODEL: &str = "whisper-1";
@@ -29,25 +28,35 @@ pub struct WhisperResponse {
     pub headers: Option<HashMap<String, String>>,
 }
 
-pub struct Transcriber {
+#[derive(Debug, Clone)]
+pub struct ModelClient {
     client: reqwest::Client,
 }
 
-impl Transcriber {
+impl ModelClient {
     pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
             client: reqwest::Client::new(),
         })
     }
 
-    pub async fn transcribe(&self, config: &Config, audio: Vec<u8>) -> anyhow::Result<String> {
+    pub async fn transcribe(
+        &self,
+        config: Arc<RwLock<Config>>,
+        audio: Vec<u8>,
+    ) -> anyhow::Result<String> {
         let request = WhisperRequest {
             file: audio,
-            model: config.model().unwrap_or(DEFAULT_WHISPER_MODEL).to_string(),
+            model: config
+                .read()
+                .unwrap()
+                .model()
+                .unwrap_or(DEFAULT_WHISPER_MODEL)
+                .to_string(),
             prompt: None,
             response_format: None,
             temperature: None,
-            language: config.language().map(|l| l.to_string()),
+            language: config.read().unwrap().language().map(|l| l.to_string()),
         };
 
         let response = self
@@ -55,7 +64,7 @@ impl Transcriber {
             .post(WHISPER_ENDPOINT)
             .header(
                 "Authorization",
-                format!("Bearer {}", config.key_openai().unwrap()),
+                format!("Bearer {}", config.read().unwrap().key_openai().unwrap()),
             )
             .multipart(
                 reqwest::multipart::Form::new()
@@ -73,24 +82,5 @@ impl Transcriber {
             .await?;
 
         Ok(response.text)
-    }
-}
-#[cfg(test)]
-mod tests {
-
-    use super::*;
-    use crate::config::ConfigManager;
-
-    #[test]
-    fn test_openai_transcribe() {
-        let config_manager = ConfigManager::new().unwrap();
-        let config = config_manager.load().unwrap();
-        let transcriber = Transcriber::new(Arc::new(RwLock::new(State::new().unwrap()))).unwrap();
-        let audio = std::fs::read("recording.wav").unwrap();
-        let text = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(transcriber.transcribe(&config, audio))
-            .unwrap();
-        println!("{}", text);
     }
 }

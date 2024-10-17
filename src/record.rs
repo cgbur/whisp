@@ -178,6 +178,7 @@ impl RecordingHandle {
         if self.buffer.is_none() {
             return Ok(None);
         }
+        info!("Ending recording.");
         let buffer = self.buffer.take().unwrap();
         // can not drop because we have that &mut self instead of self.
         // drop(self.stream);
