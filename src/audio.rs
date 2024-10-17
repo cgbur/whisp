@@ -82,7 +82,7 @@ impl Write for MemoryWriter {
     }
 }
 
-struct Recorder {
+pub struct Recorder {
     host: Host,
 }
 
@@ -165,7 +165,7 @@ impl Recorder {
 
 /// Handle to the active recording. When dropped or finalized, the recording
 /// will end. You must call `finalize` to recieve the data.
-struct RecordingHandle {
+pub struct RecordingHandle {
     stream: cpal::Stream,
     writer: WavWriterHandle,
     // The buffer the data is being written to. Presence of this buffer

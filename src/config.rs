@@ -26,9 +26,14 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     open_ai_key: Option<String>,
 
+    // Whisper settings, refactor when we support multiple models
     /// Preferred language
     #[serde(default, skip_serializing_if = "Option::is_none")]
     language: Option<String>,
+
+    /// Model to use for transcriptions
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
 }
 
 impl PartialEq for Config {
@@ -54,6 +59,7 @@ impl Default for Config {
             ),
             open_ai_key: None,
             language: None,
+            model: None,
         }
     }
 }
@@ -82,6 +88,11 @@ impl Config {
     /// Returns the language configuration.
     pub fn language(&self) -> Option<&str> {
         self.language.as_deref()
+    }
+
+    /// Returns the model to use for transcriptions.
+    pub fn model(&self) -> Option<&str> {
+        self.model.as_deref()
     }
 }
 
@@ -200,6 +211,7 @@ mod tests {
             hotkey: HotKey::new(Some(Modifiers::CONTROL), global_hotkey::hotkey::Code::KeyA),
             open_ai_key: Some("external_key".to_string()),
             language: Some("en".to_string()),
+            model: Some("something-else".to_string()),
         };
         let serialized =
             toml::to_string_pretty(&external_config).expect("Failed to serialize external config");
@@ -241,14 +253,5 @@ mod tests {
         let mut custom_hotkey = default_hotkey.clone();
         custom_hotkey.key = global_hotkey::hotkey::Code::KeyA;
         assert!(!Config::is_default_hotkey(&custom_hotkey));
-    }
-
-    #[test]
-    fn test_basic() {
-        let manager = ConfigManager::new().unwrap();
-        let mut config = manager.load().unwrap();
-        manager.save(&config).unwrap();
-        config.set_key_openai("sef");
-        manager.save(&config).unwrap();
     }
 }
