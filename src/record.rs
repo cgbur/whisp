@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Host, Sample};
+use cpal::Host;
 use hound::WavWriter;
 use parking_lot::Mutex;
 use tao::event_loop::EventLoopProxy;
@@ -232,7 +232,7 @@ fn write_data(
     writer: &WavWriterHandle,
     event_sender: &EventLoopProxy<UserEvent>,
 ) {
-    if !state.mic_active && db_fs(data) > MIN_DB {
+    if !state.mic_active && data.iter().any(|&sample| sample != 0.0) {
         state.mic_active = true;
         event_sender.send_event(UserEvent::SetIcon(Active)).ok();
     }
@@ -245,6 +245,8 @@ fn write_data(
     }
 }
 
+/* save for later when we may provide basic filtering based on volume.
+
 pub const MIN_DB: f32 = -96.0;
 
 /// Convert a slice of f32 samples to dBFS.
@@ -255,3 +257,4 @@ pub fn db_fs(data: &[f32]) -> f32 {
 
     (20.0 * max_sample.log10()).clamp(MIN_DB, 0.0)
 }
+*/
