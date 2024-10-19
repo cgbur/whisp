@@ -76,7 +76,7 @@ fn default_auto_paste() -> bool {
 }
 
 fn default_discard_duration() -> f32 {
-    0.75
+    0.5
 }
 
 impl Default for Config {
