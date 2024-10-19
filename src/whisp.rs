@@ -12,7 +12,7 @@ use tracing_subscriber::EnvFilter;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
 use whisp::config::ConfigManager;
-use whisp::event::UserEvent;
+use whisp::event::WhispEvent;
 use whisp::icon::MicState;
 use whisp::process::Processor;
 use whisp::record::{Recorder, RecordingHandle};
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
     let tray_channel = TrayIconEvent::receiver();
     let hotkey_channel = GlobalHotKeyEvent::receiver();
 
-    let event_loop: EventLoop<UserEvent> = EventLoopBuilder::with_user_event().build();
+    let event_loop: EventLoop<WhispEvent> = EventLoopBuilder::with_user_event().build();
     let event_sender = event_loop.create_proxy();
 
     // Set up processor for handling audio data async operations
@@ -126,10 +126,10 @@ fn main() -> Result<()> {
         // Handle user provided events
         if let Event::UserEvent(event) = event {
             match event {
-                UserEvent::MicStateChanged(state) => {
+                WhispEvent::StateChanged(state) => {
                     icon_tray.as_ref().map(|i| i.set_icon(Some(state.icon())));
                 }
-                UserEvent::TranscriptReady(text) => {
+                WhispEvent::TranscriptReady(text) => {
                     let config = config.read();
                     info!(
                         auto_paste = config.auto_paste(),
@@ -176,7 +176,7 @@ fn main() -> Result<()> {
                 match active_recording.take() {
                     Some(mut recording) => {
                         event_sender
-                            .send_event(UserEvent::MicStateChanged(MicState::Inactive))
+                            .send_event(WhispEvent::StateChanged(MicState::Inactive))
                             .ok();
                         match recording.finish() {
                             Ok(Some(data)) => {
@@ -194,7 +194,7 @@ fn main() -> Result<()> {
                     }
                     None => {
                         event_sender
-                            .send_event(UserEvent::MicStateChanged(MicState::Activating))
+                            .send_event(WhispEvent::StateChanged(MicState::Activating))
                             .ok();
                         match recorder.start_recording(event_sender.clone()) {
                             Ok(handle) => {

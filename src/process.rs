@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info};
 
 use crate::config::Config;
-use crate::event::UserEvent;
+use crate::event::WhispEvent;
 use crate::models::ModelClient;
 
 /// Processing pipeline for audio data. This accepts audio data bytes and
@@ -27,7 +27,7 @@ impl Processor {
     /// Create a new pipeline instance.
     pub fn new(
         config: Arc<RwLock<Config>>,
-        event_sender: EventLoopProxy<UserEvent>,
+        event_sender: EventLoopProxy<WhispEvent>,
     ) -> anyhow::Result<Self> {
         // Set up tokio runtime
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -70,7 +70,7 @@ impl Processor {
 
 fn start_results_collector(
     runtime: &Runtime,
-    event_sender: EventLoopProxy<UserEvent>,
+    event_sender: EventLoopProxy<WhispEvent>,
 ) -> anyhow::Result<mpsc::UnboundedSender<TranscriptionTask>> {
     let (task_sender, mut task_receiver) = tokio::sync::mpsc::unbounded_channel();
 
@@ -79,7 +79,9 @@ fn start_results_collector(
             match task.await {
                 Ok(Ok(text)) => {
                     info!("Transcription: {}", text);
-                    event_sender.send_event(UserEvent::TranscriptReady(text)).ok();
+                    event_sender
+                        .send_event(WhispEvent::TranscriptReady(text))
+                        .ok();
                 }
                 Ok(Err(e)) => {
                     error!("Error processing audio: {:?}", e);

@@ -19,7 +19,7 @@ use tao::event_loop::EventLoopProxy;
 use thiserror::Error;
 use tracing::{error, info};
 
-use crate::event::UserEvent;
+use crate::event::WhispEvent;
 use crate::icon::MicState::Active;
 
 #[derive(Debug, Error)]
@@ -108,7 +108,7 @@ impl Recorder {
 
     pub fn start_recording(
         &self,
-        event_sender: EventLoopProxy<UserEvent>,
+        event_sender: EventLoopProxy<WhispEvent>,
     ) -> Result<RecordingHandle> {
         let device = self
             .host
@@ -230,11 +230,13 @@ fn write_data(
     state: &mut RecordingState,
     data: &[f32],
     writer: &WavWriterHandle,
-    event_sender: &EventLoopProxy<UserEvent>,
+    event_sender: &EventLoopProxy<WhispEvent>,
 ) {
     if !state.mic_active && data.iter().any(|&sample| sample != 0.0) {
         state.mic_active = true;
-        event_sender.send_event(UserEvent::MicStateChanged(Active)).ok();
+        event_sender
+            .send_event(WhispEvent::StateChanged(Active))
+            .ok();
     }
     if let Some(mut guard) = writer.try_lock() {
         if let Some(writer) = guard.as_mut() {
