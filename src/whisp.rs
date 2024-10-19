@@ -1,28 +1,21 @@
-mod config;
-mod models;
-mod paste;
-mod process;
-mod record;
-
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use config::ConfigManager;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-use process::Processor;
-use record::{Recorder, RecordingHandle};
+use parking_lot::{Mutex, RwLock};
 use tao::event::{Event, StartCause};
-use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tracing::{error, warn};
+use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{TrayIconBuilder, TrayIconEvent};
-
-const APP_NAME: &str = "whisp";
-const DEFAULT_LOG_LEVEL: &str = "info";
-const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
+use whisp::config::ConfigManager;
+use whisp::event::UserEvent;
+use whisp::icon::MicState;
+use whisp::process::Processor;
+use whisp::record::{Recorder, RecordingHandle};
+use whisp::{DEFAULT_LOG_LEVEL, VERSION};
 
 fn main() -> Result<()> {
     // Initialize the logger
@@ -37,12 +30,12 @@ fn main() -> Result<()> {
     let config_manager = ConfigManager::new()?;
     let config = Arc::new(RwLock::new(config_manager.load()?));
     // save back the config to create the file if it doesn't exist
-    config_manager.save(&config.read().unwrap())?;
+    config_manager.save(&config.read())?;
 
     // Set up hotkey
     let hotkey_manager = GlobalHotKeyManager::new().context("Failed to create hotkey manager")?;
     hotkey_manager
-        .register(config.read().unwrap().hotkey())
+        .register(config.read().hotkey())
         .context("Failed to register hotkey")?;
 
     // Set up recorder
@@ -70,59 +63,68 @@ fn main() -> Result<()> {
 
     // Set up the event loop
     let mut icon_tray = None;
+
     let menu_channel = MenuEvent::receiver();
     let tray_channel = TrayIconEvent::receiver();
     let hotkey_channel = GlobalHotKeyEvent::receiver();
 
-    EventLoopBuilder::new()
-        .build()
-        .run(move |event, _, control_flow| {
-            *control_flow = ControlFlow::Wait;
+    let event_loop: EventLoop<UserEvent> = EventLoopBuilder::with_user_event().build();
+    let event_sender = event_loop.create_proxy();
 
-            if let Event::NewEvents(StartCause::Init) = event {
-                let icon = load_icon(Path::new(ICON_PATH));
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
 
-                // We create the icon once the event loop is actually running
-                // to prevent issues like https://github.com/tauri-apps/tray-icon/issues/90
-                icon_tray = Some(
-                    TrayIconBuilder::new()
-                        .with_menu(Box::new(tray_menu.clone()))
-                        .with_tooltip("whisp - speech to text")
-                        .with_icon(icon)
-                        .build()
-                        .unwrap(),
-                );
+        if let Event::NewEvents(StartCause::Init) = event {
+            // We create the icon once the event loop is actually running
+            // to prevent issues like https://github.com/tauri-apps/tray-icon/issues/90
 
-                // We have to request a redraw here to have the icon actually show up.
-                // Tao only exposes a redraw method on the Window so we use core-foundation directly.
-                #[cfg(target_os = "macos")]
-                unsafe {
-                    use core_foundation::runloop::{CFRunLoopGetMain, CFRunLoopWakeUp};
+            icon_tray.replace(
+                TrayIconBuilder::new()
+                    .with_menu(Box::new(tray_menu.clone()))
+                    .with_tooltip("whisp - speech to text")
+                    .with_icon(MicState::Inactive.icon())
+                    .build()
+                    .unwrap(),
+            );
 
-                    let rl = CFRunLoopGetMain();
-                    CFRunLoopWakeUp(rl);
-                }
+            // We have to request a redraw here to have the icon actually show up.
+            // Tao only exposes a redraw method on the Window so we use core-foundation directly.
+            #[cfg(target_os = "macos")]
+            unsafe {
+                use core_foundation::runloop::{CFRunLoopGetMain, CFRunLoopWakeUp};
+
+                let rl = CFRunLoopGetMain();
+                CFRunLoopWakeUp(rl);
             }
+        }
 
-            if let Ok(event) = menu_channel.try_recv() {
-                if event.id == icon_quit.id() {
-                    icon_tray.take();
-                    *control_flow = ControlFlow::Exit;
-                }
-                // Handle other menu events
+        if let Ok(event) = menu_channel.try_recv() {
+            if event.id == icon_quit.id() {
+                icon_tray.take();
+                *control_flow = ControlFlow::Exit;
             }
+            // Handle other menu events
+        }
 
-            #[expect(clippy::redundant_pattern_matching)]
-            if let Ok(_) = tray_channel.try_recv() {
-                // Handle tray icon events
-            }
+        #[expect(clippy::redundant_pattern_matching)]
+        if let Ok(_) = tray_channel.try_recv() {
+            // Handle tray icon events
+        }
 
-            if let Ok(event) = hotkey_channel.try_recv() {
-                if event.id() == config.read().unwrap().hotkey().id()
-                    && event.state() == HotKeyState::Pressed
-                {
-                    match active_recording.take() {
-                        Some(mut recording) => match recording.finish() {
+        if let Event::UserEvent(event) = event {
+            match event {
+                UserEvent::SetIcon(s) => icon_tray.as_ref().map(|i| i.set_icon(Some(s.icon()))),
+            };
+        }
+
+        if let Ok(event) = hotkey_channel.try_recv() {
+            if event.id() == config.read().hotkey().id() && event.state() == HotKeyState::Pressed {
+                match active_recording.take() {
+                    Some(mut recording) => {
+                        event_sender
+                            .send_event(UserEvent::SetIcon(MicState::Inactive))
+                            .ok();
+                        match recording.finish() {
                             Ok(Some(data)) => {
                                 if processor.submit_audio(data).is_err() {
                                     error!("Failed to submit audio to processor");
@@ -134,29 +136,23 @@ fn main() -> Result<()> {
                             Err(e) => {
                                 error!(error = ?e, "Failed to finish recording");
                             }
-                        },
-                        None => match recorder.start_recording() {
+                        }
+                    }
+                    None => {
+                        event_sender
+                            .send_event(UserEvent::SetIcon(MicState::Activating))
+                            .ok();
+                        match recorder.start_recording(event_sender.clone()) {
                             Ok(handle) => {
                                 active_recording = Some(handle);
                             }
                             Err(e) => {
                                 error!(error = ?e, "Failed to start recording");
                             }
-                        },
+                        }
                     }
                 }
             }
-        })
-}
-
-fn load_icon(path: &Path) -> tray_icon::Icon {
-    let (icon_rgba, icon_width, icon_height) = {
-        let image = image::open(path)
-            .expect("Failed to open icon path")
-            .into_rgba8();
-        let (width, height) = image.dimensions();
-        let rgba = image.into_raw();
-        (rgba, width, height)
-    };
-    tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+        }
+    });
 }

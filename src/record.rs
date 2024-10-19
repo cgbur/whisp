@@ -8,14 +8,19 @@
 //! formats. Whisper supports: m4a, mp3, webm, mp4, mpga, wav, and mpeg.
 
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Host, Sample};
+use cpal::{Host, Sample};
 use hound::WavWriter;
+use parking_lot::Mutex;
+use tao::event_loop::EventLoopProxy;
 use thiserror::Error;
 use tracing::{error, info};
+
+use crate::event::UserEvent;
+use crate::icon::MicState::Active;
 
 #[derive(Debug, Error)]
 pub enum RecorderError {
@@ -40,7 +45,7 @@ type WavWriterHandle = Arc<Mutex<Option<WavWriter<MemoryWriter>>>>;
 /// finalize method for the wav writer does not return the inner data, so we
 /// store it behind an Arc<Mutex> to allow for cheap cloning and access to the
 /// inner data.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct MemoryWriter {
     inner: Arc<Mutex<Cursor<Vec<u8>>>>,
 }
@@ -58,9 +63,7 @@ impl MemoryWriter {
             RecorderError::Anyhow(anyhow!("Failed to unwrap inner Arc in MemoryWriter"))
         })?;
         // Extract the cursor
-        let cursor = owned.into_inner().map_err(|_| {
-            RecorderError::Anyhow(anyhow!("Failed to unwrap inner Mutex in MemoryWriter"))
-        })?;
+        let cursor = owned.into_inner();
         // Extract the Vec
         Ok(cursor.into_inner())
     }
@@ -68,22 +71,26 @@ impl MemoryWriter {
 
 impl Seek for MemoryWriter {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        self.inner.lock().unwrap().seek(pos)
+        self.inner.lock().seek(pos)
     }
 }
 
 impl Write for MemoryWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.lock().unwrap().write(buf)
+        self.inner.lock().write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.inner.lock().unwrap().flush()
+        self.inner.lock().flush()
     }
 }
 
 pub struct Recorder {
     host: Host,
+}
+
+pub struct RecordingState {
+    mic_active: bool,
 }
 
 impl Recorder {
@@ -93,7 +100,10 @@ impl Recorder {
         }
     }
 
-    pub fn start_recording(&self) -> Result<RecordingHandle> {
+    pub fn start_recording(
+        &self,
+        event_sender: EventLoopProxy<UserEvent>,
+    ) -> Result<RecordingHandle> {
         let device = self
             .host
             .default_input_device()
@@ -102,7 +112,7 @@ impl Recorder {
             .default_input_config()
             .map_err(|_| RecorderError::NoInputDevice)?;
 
-        info!(device_name=%device.name().unwrap(), "Recording from device");
+        info!(device_name=%device.name().unwrap(), config=?config, "Recording from device");
 
         let spec = wav_spec_from_config(&config);
 
@@ -118,28 +128,14 @@ impl Recorder {
             error!("an error occurred on stream: {}", err);
         };
 
+        // Create a recording state for UI and filtering.
+        let mut state = RecordingState { mic_active: false };
+
         let stream = match config.sample_format() {
-            cpal::SampleFormat::I8 => device.build_input_stream(
-                &config.into(),
-                move |data, _: &_| write_input_data::<i8, i8>(data, &writer_2),
-                err_fn,
-                None,
-            )?,
-            cpal::SampleFormat::I16 => device.build_input_stream(
-                &config.into(),
-                move |data, _: &_| write_input_data::<i16, i16>(data, &writer_2),
-                err_fn,
-                None,
-            )?,
-            cpal::SampleFormat::I32 => device.build_input_stream(
-                &config.into(),
-                move |data, _: &_| write_input_data::<i32, i32>(data, &writer_2),
-                err_fn,
-                None,
-            )?,
             cpal::SampleFormat::F32 => device.build_input_stream(
                 &config.into(),
-                move |data, _: &_| write_input_data::<f32, f32>(data, &writer_2),
+                // move |data, _: &_| write_input_data::<f32, f32>(data, &writer_2),
+                move |data, _: &_| write_data(&mut state, data, &writer_2, &event_sender),
                 err_fn,
                 None,
             )?,
@@ -187,7 +183,6 @@ impl RecordingHandle {
         // Finalize the writer so it writes the proper framing information.
         self.writer
             .lock()
-            .unwrap()
             .take()
             .unwrap()
             .finalize()
@@ -225,17 +220,34 @@ fn sample_format(format: cpal::SampleFormat) -> hound::SampleFormat {
     }
 }
 
-fn write_input_data<T, U>(input: &[T], writer: &WavWriterHandle)
-where
-    T: Sample,
-    U: Sample + hound::Sample + FromSample<T>,
-{
-    if let Ok(mut guard) = writer.try_lock() {
+fn write_data(
+    state: &mut RecordingState,
+    data: &[f32],
+    writer: &WavWriterHandle,
+    event_sender: &EventLoopProxy<UserEvent>,
+) {
+    if !state.mic_active {
+        if db_fs(data) > MIN_DB {
+            state.mic_active = true;
+            event_sender.send_event(UserEvent::SetIcon(Active)).ok();
+        }
+    }
+    if let Some(mut guard) = writer.try_lock() {
         if let Some(writer) = guard.as_mut() {
-            for &sample in input.iter() {
-                let sample: U = U::from_sample(sample);
+            for &sample in data.iter() {
                 writer.write_sample(sample).ok();
             }
         }
     }
+}
+
+pub const MIN_DB: f32 = -96.0;
+
+/// Convert a slice of f32 samples to dBFS.
+pub fn db_fs(data: &[f32]) -> f32 {
+    let max_sample = data
+        .iter()
+        .fold(f32::EQUILIBRIUM, |max, &sample| sample.abs().max(max));
+
+    (20.0 * max_sample.log10()).clamp(MIN_DB, 0.0)
 }

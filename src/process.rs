@@ -1,7 +1,8 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use anyhow::Result;
 use arboard::Clipboard;
+use parking_lot::RwLock;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use tracing::{error, info};
@@ -111,7 +112,7 @@ async fn handle_transcription(
     paster: &mut std::sync::mpsc::Sender<()>,
     transcription: String,
 ) -> Result<()> {
-    let config = config.read().unwrap();
+    let config = config.read();
     info!(
         auto_paste = config.auto_paste(),
         restore_clipboard = config.restore_clipboard(),

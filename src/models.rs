@@ -1,6 +1,8 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
+use anyhow::Context;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
@@ -49,14 +51,13 @@ impl ModelClient {
             file: audio,
             model: config
                 .read()
-                .unwrap()
                 .model()
                 .unwrap_or(DEFAULT_WHISPER_MODEL)
                 .to_string(),
             prompt: None,
             response_format: None,
             temperature: None,
-            language: config.read().unwrap().language().map(|l| l.to_string()),
+            language: config.read().language().map(|l| l.to_string()),
         };
 
         let response = self
@@ -64,7 +65,10 @@ impl ModelClient {
             .post(WHISPER_ENDPOINT)
             .header(
                 "Authorization",
-                format!("Bearer {}", config.read().unwrap().key_openai().unwrap()),
+                format!(
+                    "Bearer {}",
+                    config.read().key_openai().context("No OpenAI key")?
+                ),
             )
             .multipart(
                 reqwest::multipart::Form::new()
