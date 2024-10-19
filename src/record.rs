@@ -9,16 +9,18 @@
 
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Host;
-use hound::WavWriter;
+use hound::{WavSpec, WavWriter};
 use parking_lot::Mutex;
 use tao::event_loop::EventLoopProxy;
 use thiserror::Error;
 use tracing::{error, info};
 
+//
 use crate::event::WhispEvent;
 use crate::icon::MicState::Active;
 
@@ -161,6 +163,7 @@ impl Recorder {
             stream,
             writer,
             buffer: Some(buffer),
+            spec,
         })
     }
 }
@@ -173,14 +176,44 @@ pub struct RecordingHandle {
     // The buffer the data is being written to. Presence of this buffer
     // indicates if the recording has been finalized or not.
     buffer: Option<MemoryWriter>,
+    spec: WavSpec,
+}
+
+pub struct Recording {
+    data: Vec<u8>,
+    spec: WavSpec,
+}
+
+impl Recording {
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    pub fn spec(&self) -> &WavSpec {
+        &self.spec
+    }
+
+    pub fn samples(&self) -> u64 {
+        self.data.len() as u64 / (self.spec.bits_per_sample / 8) as u64
+    }
+
+    pub fn duration(&self) -> Duration {
+        let num_samples = self.samples();
+        let duration = num_samples as f64 / self.spec.sample_rate as f64;
+        Duration::from_secs_f64(duration)
+    }
+
+    pub fn into_data(self) -> Vec<u8> {
+        self.data
+    }
 }
 
 impl RecordingHandle {
-    pub fn finish(&mut self) -> Result<Option<Vec<u8>>> {
+    pub fn finish(&mut self) -> Result<Option<Recording>> {
         if self.buffer.is_none() {
             return Ok(None);
         }
-        info!("Ending recording.");
+        info!("ending recording");
         let buffer = self.buffer.take().unwrap();
         // can not drop because we have that &mut self instead of self.
         // drop(self.stream);
@@ -195,7 +228,11 @@ impl RecordingHandle {
             .map_err(|e| RecorderError::Anyhow(anyhow!("Failed to finalize writer: {}", e)))?;
         // Now that its ended, we can grab out the actual data and return it.
         let data = buffer.try_into_inner()?;
-        Ok(Some(data))
+
+        Ok(Some(Recording {
+            data,
+            spec: self.spec,
+        }))
     }
 }
 
@@ -232,12 +269,19 @@ fn write_data(
     writer: &WavWriterHandle,
     event_sender: &EventLoopProxy<WhispEvent>,
 ) {
-    if !state.mic_active && data.iter().any(|&sample| sample != 0.0) {
-        state.mic_active = true;
-        event_sender
-            .send_event(WhispEvent::StateChanged(Active))
-            .ok();
+    if !state.mic_active {
+        if data.iter().any(|&sample| sample != 0.0) {
+            // set active and record this batch
+            state.mic_active = true;
+            event_sender
+                .send_event(WhispEvent::StateChanged(Active))
+                .ok();
+        } else {
+            // ignore this batch
+            return;
+        }
     }
+
     if let Some(mut guard) = writer.try_lock() {
         if let Some(writer) = guard.as_mut() {
             for &sample in data.iter() {
