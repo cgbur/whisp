@@ -8,23 +8,28 @@ use parking_lot::RwLock;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 use tracing::{error, info, warn};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
 use whisp::config::ConfigManager;
 use whisp::event::WhispEvent;
 use whisp::icon::MicState;
-use whisp::process::Processor;
+use whisp::notify::NotificationLayer;
+use whisp::process::AudioPipeline;
 use whisp::record::{Recorder, RecordingHandle};
 use whisp::{DEFAULT_LOG_LEVEL, VERSION};
 
 fn main() -> Result<()> {
-    // Initialize the logger
+    // // Initialize the logger
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_env("WHISP_LOG")
                 .unwrap_or_else(|_| EnvFilter::new(DEFAULT_LOG_LEVEL)),
         )
+        .finish()
+        .with(NotificationLayer::new())
         .init();
 
     // Load config
@@ -76,7 +81,7 @@ fn main() -> Result<()> {
     let event_sender = event_loop.create_proxy();
 
     // Set up processor for handling audio data async operations
-    let processor = Processor::new(config.clone(), event_sender.clone())?;
+    let audio_pipeline = AudioPipeline::new(config.clone(), event_sender.clone())?;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -180,7 +185,7 @@ fn main() -> Result<()> {
                             .ok();
                         match recording.finish() {
                             Ok(Some(data)) => {
-                                if processor.submit_audio(data).is_err() {
+                                if audio_pipeline.submit(data).is_err() {
                                     error!("Failed to submit audio to processor");
                                 }
                             }

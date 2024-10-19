@@ -2,11 +2,13 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use dirs::config_dir;
 use global_hotkey::hotkey::{HotKey, Modifiers};
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::APP_NAME;
 
@@ -46,6 +48,13 @@ pub struct Config {
         skip_serializing_if = "Config::is_default_auto_paste"
     )]
     auto_paste: bool,
+
+    /// Discard recordings under a certain duration
+    #[serde(
+        default = "default_discard_duration",
+        skip_serializing_if = "Config::is_default_discard_duration"
+    )]
+    discard_duration: f32,
 }
 
 impl PartialEq for Config {
@@ -66,6 +75,10 @@ fn default_auto_paste() -> bool {
     true
 }
 
+fn default_discard_duration() -> f32 {
+    0.75
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -78,6 +91,7 @@ impl Default for Config {
             model: None,
             restore_clipboard: false,
             auto_paste: default_auto_paste(),
+            discard_duration: default_discard_duration(),
         }
     }
 }
@@ -114,6 +128,11 @@ impl Config {
         auto_paste == &Self::default().auto_paste
     }
 
+    /// Checks if the provided discard duration is the default value.
+    fn is_default_discard_duration(discard_duration: &f32) -> bool {
+        discard_duration == &Self::default().discard_duration
+    }
+
     /// Returns the language configuration.
     pub fn language(&self) -> Option<&str> {
         self.language.as_deref()
@@ -133,6 +152,11 @@ impl Config {
     /// Paste contents automatically after transcribing
     pub fn auto_paste(&self) -> bool {
         self.auto_paste
+    }
+
+    /// Discard recordings under a certain duration
+    pub fn discard_duration(&self) -> Duration {
+        Duration::from_secs_f32(self.discard_duration)
     }
 }
 
@@ -171,6 +195,14 @@ impl ConfigManager {
             .with_context(|| format!("Failed to read config file at {:?}", self.config_path))?;
         let config: Config = toml::from_str(&config_content)
             .with_context(|| format!("Failed to parse config file at {:?}", self.config_path))?;
+
+        if config.key_openai().is_none() {
+            warn!(
+                "OpenAI API key is not set. Transcriptions will not work without it. \
+                 Copy the config path via the tray icon to set the key."
+            );
+        }
+
         Ok(config)
     }
 

@@ -10,11 +10,12 @@ use tracing::{error, info};
 use crate::config::Config;
 use crate::event::WhispEvent;
 use crate::models::ModelClient;
+use crate::record::Recording;
 
 /// Processing pipeline for audio data. This accepts audio data bytes and
 /// performs the processing pipeline stages on it. Carrying it through from
 /// transcription to pasting.
-pub struct Processor {
+pub struct AudioPipeline {
     runtime: Runtime,
     model: ModelClient,
     config: Arc<RwLock<Config>>,
@@ -23,7 +24,7 @@ pub struct Processor {
 
 type TranscriptionTask = tokio::task::JoinHandle<Result<String>>;
 
-impl Processor {
+impl AudioPipeline {
     /// Create a new pipeline instance.
     pub fn new(
         config: Arc<RwLock<Config>>,
@@ -51,17 +52,26 @@ impl Processor {
 
     /// Submits a new audio sample to the processing pipeline. This is
     /// non-blocking and all samples will be processed in order.
-    pub fn submit_audio(&self, audio: Vec<u8>) -> anyhow::Result<()> {
+    pub fn submit(&self, recording: Recording) -> anyhow::Result<()> {
         info!(
-            "Submitting audio for processing: {:.2}mb",
-            audio.len() as f64 / 1024.0 / 1024.0
+            samples = recording.samples(),
+            bytes = recording.data().len(),
+            bytes_mb = recording.data().len() as f64 / (1024.0 * 1024.0),
+            length_seconds = recording.duration().as_secs_f64(),
+            "audio submitted"
         );
+
+        if recording.duration() < self.config.read().discard_duration() {
+            info!(discard_duration = ?self.config.read().discard_duration(), "discarding recording");
+            return Ok(());
+        }
+
         let model = self.model.clone();
         let config = self.config.clone();
 
         let handle = self
             .runtime
-            .spawn(async move { model.transcribe(config, audio).await });
+            .spawn(async move { model.transcribe(config, recording.into_data()).await });
 
         self.transcription_handles.send(handle)?;
         Ok(())

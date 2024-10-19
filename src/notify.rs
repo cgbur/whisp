@@ -6,13 +6,12 @@ use tracing::{error, Event, Level, Subscriber};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::Layer;
 
-use crate::icon::ICON_PATH;
 use crate::{APP_NAME, APP_NAME_PRETTY};
 
 /// Send a system notification with a summary and body.
 pub fn notify(summary: &str, body: &str) {
     Notification::new()
-        .icon(ICON_PATH)
+        .auto_icon()
         .appname(APP_NAME)
         .summary(&format!("{} - {}", APP_NAME_PRETTY, summary))
         .body(body)
