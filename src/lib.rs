@@ -6,6 +6,5 @@ pub mod config;
 pub mod event;
 pub mod icon;
 pub mod models;
-pub mod paste;
 pub mod process;
 pub mod record;

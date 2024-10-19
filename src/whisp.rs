@@ -16,7 +16,7 @@ use whisp::event::WhispEvent;
 use whisp::icon::MicState;
 use whisp::process::Processor;
 use whisp::record::{Recorder, RecordingHandle};
-use whisp::{paste, DEFAULT_LOG_LEVEL, VERSION};
+use whisp::{DEFAULT_LOG_LEVEL, VERSION};
 
 fn main() -> Result<()> {
     // Initialize the logger
@@ -156,7 +156,7 @@ fn main() -> Result<()> {
 
                     if config.auto_paste() {
                         // Paste the transcription
-                        if let Err(e) = paste::paste(&mut enigo) {
+                        if let Err(e) = paste(&mut enigo) {
                             warn!("Failed to paste transcription: {}", e);
                         }
                         if let Some(previous) = previous {
@@ -209,4 +209,20 @@ fn main() -> Result<()> {
             }
         }
     });
+}
+
+fn paste(enigo: &mut Enigo) -> anyhow::Result<()> {
+    use enigo::Direction::{Click, Press, Release};
+    use enigo::{Key, Keyboard};
+
+    #[cfg(target_os = "macos")]
+    let paste_key = Key::Meta;
+    #[cfg(not(target_os = "macos"))]
+    let paste_key = Key::Control;
+
+    enigo.key(paste_key, Press)?;
+    enigo.key(Key::Unicode('v'), Click)?;
+    enigo.key(paste_key, Release)?;
+
+    Ok(())
 }

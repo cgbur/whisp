@@ -11,7 +11,7 @@ const WHISPER_ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
 const DEFAULT_WHISPER_MODEL: &str = "whisper-1";
 
 #[derive(Debug, Serialize, Clone)]
-pub struct WhisperRequest {
+struct WhisperRequest {
     pub file: Vec<u8>,
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -25,7 +25,7 @@ pub struct WhisperRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct WhisperResponse {
+struct WhisperResponse {
     pub text: String,
     pub headers: Option<HashMap<String, String>>,
 }
