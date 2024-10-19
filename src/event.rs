@@ -4,6 +4,6 @@ use crate::icon::MicState;
 /// processed.
 #[derive(Debug, Clone)]
 pub enum UserEvent {
-    SetIcon(MicState),
-    Transcription(String),
+    MicStateChanged(MicState),
+    TranscriptReady(String),
 }

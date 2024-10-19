@@ -79,7 +79,7 @@ fn start_results_collector(
             match task.await {
                 Ok(Ok(text)) => {
                     info!("Transcription: {}", text);
-                    event_sender.send_event(UserEvent::Transcription(text)).ok();
+                    event_sender.send_event(UserEvent::TranscriptReady(text)).ok();
                 }
                 Ok(Err(e)) => {
                     error!("Error processing audio: {:?}", e);

@@ -234,7 +234,7 @@ fn write_data(
 ) {
     if !state.mic_active && data.iter().any(|&sample| sample != 0.0) {
         state.mic_active = true;
-        event_sender.send_event(UserEvent::SetIcon(Active)).ok();
+        event_sender.send_event(UserEvent::MicStateChanged(Active)).ok();
     }
     if let Some(mut guard) = writer.try_lock() {
         if let Some(writer) = guard.as_mut() {

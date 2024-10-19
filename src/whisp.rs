@@ -126,10 +126,10 @@ fn main() -> Result<()> {
         // Handle user provided events
         if let Event::UserEvent(event) = event {
             match event {
-                UserEvent::SetIcon(state) => {
+                UserEvent::MicStateChanged(state) => {
                     icon_tray.as_ref().map(|i| i.set_icon(Some(state.icon())));
                 }
-                UserEvent::Transcription(text) => {
+                UserEvent::TranscriptReady(text) => {
                     let config = config.read();
                     info!(
                         auto_paste = config.auto_paste(),
@@ -176,7 +176,7 @@ fn main() -> Result<()> {
                 match active_recording.take() {
                     Some(mut recording) => {
                         event_sender
-                            .send_event(UserEvent::SetIcon(MicState::Inactive))
+                            .send_event(UserEvent::MicStateChanged(MicState::Inactive))
                             .ok();
                         match recording.finish() {
                             Ok(Some(data)) => {
@@ -194,7 +194,7 @@ fn main() -> Result<()> {
                     }
                     None => {
                         event_sender
-                            .send_event(UserEvent::SetIcon(MicState::Activating))
+                            .send_event(UserEvent::MicStateChanged(MicState::Activating))
                             .ok();
                         match recorder.start_recording(event_sender.clone()) {
                             Ok(handle) => {

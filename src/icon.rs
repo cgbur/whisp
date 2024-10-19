@@ -1,15 +1,15 @@
 use std::path::Path;
 use std::sync::LazyLock;
 
-const COLOR_ACTIVATING: (u8, u8, u8) = (255, 223, 0);
-const COLOR_ACTIVE: (u8, u8, u8) = (0, 255, 0);
-const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
+use tray_icon::Icon;
 
-static ICON: LazyLock<tray_icon::Icon> = LazyLock::new(|| load_icon(ICON_PATH, None));
-static ICON_ACTIVATING: LazyLock<tray_icon::Icon> =
-    LazyLock::new(|| load_icon(ICON_PATH, Some(COLOR_ACTIVATING)));
-static ICON_ACTIVE: LazyLock<tray_icon::Icon> =
-    LazyLock::new(|| load_icon(ICON_PATH, Some(COLOR_ACTIVE)));
+const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
+const COLOR_WAITING: (u8, u8, u8) = (255, 223, 0);
+const COLOR_ACTIVE: (u8, u8, u8) = (0, 255, 0);
+
+static IDLE: LazyLock<Icon> = LazyLock::new(|| load_icon(ICON_PATH, None));
+static WAITING: LazyLock<Icon> = LazyLock::new(|| load_icon(ICON_PATH, Some(COLOR_WAITING)));
+static ACTIVE: LazyLock<Icon> = LazyLock::new(|| load_icon(ICON_PATH, Some(COLOR_ACTIVE)));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MicState {
@@ -19,16 +19,16 @@ pub enum MicState {
 }
 
 impl MicState {
-    pub fn icon(&self) -> tray_icon::Icon {
+    pub fn icon(&self) -> Icon {
         match self {
-            MicState::Activating => ICON_ACTIVATING.clone(),
-            MicState::Active => ICON_ACTIVE.clone(),
-            MicState::Inactive => ICON.clone(),
+            MicState::Activating => WAITING.clone(),
+            MicState::Active => ACTIVE.clone(),
+            MicState::Inactive => IDLE.clone(),
         }
     }
 }
 
-fn load_icon(path: impl AsRef<Path>, recolor: Option<(u8, u8, u8)>) -> tray_icon::Icon {
+fn load_icon(path: impl AsRef<Path>, recolor: Option<(u8, u8, u8)>) -> Icon {
     let (icon_rgba, icon_width, icon_height) = {
         let mut image = image::open(path)
             .expect("Failed to open icon path")
@@ -46,5 +46,5 @@ fn load_icon(path: impl AsRef<Path>, recolor: Option<(u8, u8, u8)>) -> tray_icon
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+    Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
 }
