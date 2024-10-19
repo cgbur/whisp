@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use arboard::Clipboard;
+use enigo::Enigo;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use parking_lot::RwLock;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
@@ -14,7 +16,7 @@ use whisp::event::UserEvent;
 use whisp::icon::MicState;
 use whisp::process::Processor;
 use whisp::record::{Recorder, RecordingHandle};
-use whisp::{DEFAULT_LOG_LEVEL, VERSION};
+use whisp::{paste, DEFAULT_LOG_LEVEL, VERSION};
 
 fn main() -> Result<()> {
     // Initialize the logger
@@ -41,8 +43,9 @@ fn main() -> Result<()> {
     let recorder = Recorder::new();
     let mut active_recording: Option<RecordingHandle> = None;
 
-    // Set up processor for handling audio data
-    let processor = Processor::new(config.clone())?;
+    // Set up keyboard and clipboard interaction
+    let mut enigo = Enigo::new(&enigo::Settings::default()).unwrap();
+    let mut clipboard = Clipboard::new()?;
 
     // Create the tray menu
     let tray_menu = Menu::new();
@@ -69,6 +72,9 @@ fn main() -> Result<()> {
 
     let event_loop: EventLoop<UserEvent> = EventLoopBuilder::with_user_event().build();
     let event_sender = event_loop.create_proxy();
+
+    // Set up processor for handling audio data async operations
+    let processor = Processor::new(config.clone(), event_sender.clone())?;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -110,12 +116,54 @@ fn main() -> Result<()> {
             // Handle tray icon events
         }
 
+        // Handle user provided events
         if let Event::UserEvent(event) = event {
             match event {
-                UserEvent::SetIcon(s) => icon_tray.as_ref().map(|i| i.set_icon(Some(s.icon()))),
+                UserEvent::SetIcon(state) => {
+                    icon_tray.as_ref().map(|i| i.set_icon(Some(state.icon())));
+                }
+                UserEvent::Transcription(text) => {
+                    let config = config.read();
+                    info!(
+                        auto_paste = config.auto_paste(),
+                        restore_clipboard = config.restore_clipboard(),
+                        "Handling transcription"
+                    );
+                    let restore = config.auto_paste() && config.restore_clipboard();
+                    let previous = if restore {
+                        match clipboard.get_text() {
+                            Ok(text) => Some(text),
+                            Err(e) => {
+                                warn!("Failed to get clipboard text: {}", e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Copy the transcription to the clipboard
+                    if let Err(e) = clipboard.set_text(&text) {
+                        warn!("Failed to set clipboard text: {}", e);
+                    }
+
+                    if config.auto_paste() {
+                        // Paste the transcription
+                        if let Err(e) = paste::paste(&mut enigo) {
+                            warn!("Failed to paste transcription: {}", e);
+                        }
+                        if let Some(previous) = previous {
+                            // Restore the previous clipboard contents
+                            if let Err(e) = clipboard.set_text(&previous) {
+                                warn!("Failed to restore clipboard text: {}", e);
+                            }
+                        }
+                    }
+                }
             };
         }
 
+        // Handle hotkey events
         if let Ok(event) = hotkey_channel.try_recv() {
             if event.id() == config.read().hotkey().id() && event.state() == HotKeyState::Pressed {
                 match active_recording.take() {
