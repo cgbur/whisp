@@ -203,7 +203,6 @@ impl ConfigManager {
     }
 
     /// Returns the path to the configuration file.
-    #[cfg(test)]
     pub fn config_path(&self) -> &std::path::Path {
         &self.config_path
     }

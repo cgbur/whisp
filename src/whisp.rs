@@ -50,6 +50,7 @@ fn main() -> Result<()> {
     // Create the tray menu
     let tray_menu = Menu::new();
     let icon_quit = MenuItem::new("Quit", true, None);
+    let icon_copy_config = MenuItem::new("Copy config path", true, None);
     tray_menu.append_items(&[
         &PredefinedMenuItem::about(
             None,
@@ -59,6 +60,7 @@ fn main() -> Result<()> {
                     .build(),
             ),
         ),
+        &icon_copy_config,
         &PredefinedMenuItem::separator(),
         &icon_quit,
     ])?;
@@ -107,8 +109,13 @@ fn main() -> Result<()> {
             if event.id == icon_quit.id() {
                 icon_tray.take();
                 *control_flow = ControlFlow::Exit;
+            } else if event.id == icon_copy_config.id() {
+                if let Err(e) =
+                    clipboard.set_text(config_manager.config_path().to_string_lossy().into_owned())
+                {
+                    error!("Failed to copy config path to clipboard: {}", e);
+                }
             }
-            // Handle other menu events
         }
 
         #[expect(clippy::redundant_pattern_matching)]
