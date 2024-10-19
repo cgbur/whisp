@@ -89,6 +89,12 @@ pub struct Recorder {
     host: Host,
 }
 
+impl Default for Recorder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct RecordingState {
     mic_active: bool,
 }
@@ -226,11 +232,9 @@ fn write_data(
     writer: &WavWriterHandle,
     event_sender: &EventLoopProxy<UserEvent>,
 ) {
-    if !state.mic_active {
-        if db_fs(data) > MIN_DB {
-            state.mic_active = true;
-            event_sender.send_event(UserEvent::SetIcon(Active)).ok();
-        }
+    if !state.mic_active && db_fs(data) > MIN_DB {
+        state.mic_active = true;
+        event_sender.send_event(UserEvent::SetIcon(Active)).ok();
     }
     if let Some(mut guard) = writer.try_lock() {
         if let Some(writer) = guard.as_mut() {

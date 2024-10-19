@@ -1,15 +1,14 @@
-use std::path::Path;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tray_icon::{TrayIconBuilder, TrayIconEvent};
 use whisp::config::ConfigManager;
 use whisp::event::UserEvent;
 use whisp::icon::MicState;
