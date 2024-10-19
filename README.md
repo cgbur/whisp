@@ -1,39 +1,78 @@
 # Whisp
 
-Whisp is a lightweight desktop speech-to-text tool designed for simplicity and
-efficiency. Modern speech-to-text models like [OpenAI's
-Whisper](https://github.com/openai/whisper) offer impressive accuracy and
-represent a significant improvement in usability over older technologies. Whisp
-aims to provide a minimal, unobtrusive interface to these models, allowing
-speech-to-text input on anything you can type in.
+A lightweight desktop speech-to-text tool powered by modern models like
+[OpenAI's Whisper](https://github.com/openai/whisper). Whisp provides a simple
+interface for converting speech to text with minimal resource overhead.
 
-### Goals
+[![Crates.io][crates-badge]][crates-url]
+[![MIT licensed][mit-badge]][mit-url]
 
-1. **Robust**: Broken tools are not useful. Whisp is stable and reliable. Errors
-   are handled gracefully, and retries are automatic when possible.
+[crates-badge]: https://img.shields.io/crates/v/whisp.svg
+[crates-url]: https://crates.io/crates/whisp
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[mit-url]: https://github.com/cgbur/whisp/blob/main/LICENSE
 
-2. **Minimal**: Resource intensive tools with many features and poor execution
-   are not useful. Whisp is lightweight and unobtrusive. It will do this one
-   thing, and do it well.
+## Overview
 
-3. **Secure**: Handling API keys, voice data, and registering a global
-   hotkey to enable recordings is a lot of power to give to a randomly
-   downloaded tool. Whisp is open source, and designed to be simple and readble.
+Whisp offers an unobtrusive and customizable way to transcribe your voice into
+text. It operates as a globally available desktop application. Activate it via a
+hotkey, and it can automatically paste the transcribed text into any focused
+input field.
 
-## Status
+Design principles:
 
-It is working, but bare bones. Using day to day to gather feedback and improve
-in free time. Currently it only supports OpenAI's api.
+- **Reliable**: Built to be stable and handle errors gracefully. Resilient in
+  the face of errors. Retry and recovery.
 
-Basic configuration in `whisp.toml`:
+- **Lightweight**: Resource-efficient, minimal system impact, simple.
 
-Hotkeys are really bad right now, need to make custom hotkey parser.
+## Installation
+
+Currently the only way to install this is via cargo:
+
+```sh
+cargo install whisp
+whisp
+# if cargo bin is not in your path
+~/.cargo/bin/whisp
+```
+
+## Configuration
+
+Configuration is managed through a `whisp.toml` file located in your systems
+configuration directory. The whisp drop-down has an option to copy the
+configuration file path to the clipboard.
 
 ```toml
 hotkey = "shift+super+Semicolon"
-openai_key = "not-a-real-key"
+openai_key = "your-api-key"
 language = "en"
 model = "whisper-1"
 restore_clipboard = true
 auto_paste = false
 ```
+
+## Usage
+
+To start using Whisp, define your preferred hotkey, configure the model, and run
+the application. You can then trigger voice recording via the hotkey and receive
+transcriptions automatically.
+
+### Common Use Cases
+
+- **Messaging**: Quickly respond to messages in chat applications like Discord
+  or Slack.
+
+- **Document Writing**: Speak freely to draft large amounts of text quickly.
+  Then apply post-processing yourself or with the help of a language model to
+  refine the text.
+
+- **Code Commenting**: Dictate comments directly into your editor. Note this
+  tool does not write code well. However, perhaps this can change when the
+  automatic post processing is added. Reach out if you are interested in
+  contributing.
+
+## License
+
+Whisp is licensed under the [MIT
+license](https://github.com/cgbur/whisp/blob/main/LICENSE).
