@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use tray_icon::Icon;
 
-const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
+pub const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
 const COLOR_WAITING: (u8, u8, u8) = (255, 223, 0);
 const COLOR_ACTIVE: (u8, u8, u8) = (0, 255, 0);
 

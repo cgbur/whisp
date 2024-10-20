@@ -206,7 +206,7 @@ fn main() -> Result<()> {
                                 active_recording = Some(handle);
                             }
                             Err(e) => {
-                                error!(error = ?e, "Failed to start recording");
+                                error!("Failed to start recording: {:?}", e);
                             }
                         }
                     }
