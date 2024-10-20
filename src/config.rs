@@ -288,6 +288,7 @@ mod tests {
             model: Some("something-else".to_string()),
             restore_clipboard: true,
             auto_paste: true,
+            discard_duration: 0.5,
         };
         let serialized =
             toml::to_string_pretty(&external_config).expect("Failed to serialize external config");

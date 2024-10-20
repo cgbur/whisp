@@ -221,13 +221,15 @@ fn paste(enigo: &mut Enigo) -> anyhow::Result<()> {
     use enigo::{Key, Keyboard};
 
     #[cfg(target_os = "macos")]
-    let paste_key = Key::Meta;
+    let paste_modifier = Key::Meta;
     #[cfg(not(target_os = "macos"))]
-    let paste_key = Key::Control;
+    let paste_modifier = Key::Control;
 
-    enigo.key(paste_key, Press)?;
+    // a modifier key is needed to paste on linux
+
+    enigo.key(paste_modifier, Press)?;
     enigo.key(Key::Unicode('v'), Click)?;
-    enigo.key(paste_key, Release)?;
+    enigo.key(paste_modifier, Release)?;
 
     Ok(())
 }

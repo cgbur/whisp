@@ -169,7 +169,7 @@ impl Recorder {
 }
 
 /// Handle to the active recording. When dropped or finalized, the recording
-/// will end. You must call `finalize` to recieve the data.
+/// will end. You must call `finalize` to receive the data.
 pub struct RecordingHandle {
     stream: cpal::Stream,
     writer: WavWriterHandle,
