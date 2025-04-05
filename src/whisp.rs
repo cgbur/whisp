@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::thread::sleep;
 
 use anyhow::{Context, Result};
 use arboard::Clipboard;
@@ -22,7 +23,7 @@ use whisp::record::{Recorder, RecordingHandle};
 use whisp::{DEFAULT_LOG_LEVEL, VERSION};
 
 fn main() -> Result<()> {
-    // // Initialize the logger
+    // Initialize the logger
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_env("WHISP_LOG")
@@ -57,6 +58,9 @@ fn main() -> Result<()> {
     let icon_quit = MenuItem::new("Quit", true, None);
     let icon_copy_config = MenuItem::new("Copy config path", true, None);
     tray_menu.append_items(&[
+        // the name of the app
+        &MenuItem::new("Whisp", false, None),
+        &PredefinedMenuItem::separator(),
         &PredefinedMenuItem::about(
             None,
             Some(
@@ -94,7 +98,7 @@ fn main() -> Result<()> {
                 TrayIconBuilder::new()
                     .with_menu(Box::new(tray_menu.clone()))
                     .with_tooltip("whisp - speech to text")
-                    .with_icon(MicState::Inactive.icon())
+                    .with_icon(MicState::Idle.icon())
                     .build()
                     .unwrap(),
             );
@@ -108,6 +112,8 @@ fn main() -> Result<()> {
                 let rl = CFRunLoopGetMain();
                 CFRunLoopWakeUp(rl);
             }
+
+            info!("Whisp ready");
         }
 
         if let Ok(event) = menu_channel.try_recv() {
@@ -132,9 +138,16 @@ fn main() -> Result<()> {
         if let Event::UserEvent(event) = event {
             match event {
                 WhispEvent::StateChanged(state) => {
+                    info!(state = ?state, "State changed");
                     icon_tray.as_ref().map(|i| i.set_icon(Some(state.icon())));
                 }
                 WhispEvent::TranscriptReady(text) => {
+                    // Set the state to idle so it goes back to being inactive
+                    // after this transcription
+                    event_sender
+                        .send_event(WhispEvent::StateChanged(MicState::Idle))
+                        .ok();
+
                     let config = config.read();
                     info!(
                         auto_paste = config.auto_paste(),
@@ -178,39 +191,39 @@ fn main() -> Result<()> {
         // Handle hotkey events
         if let Ok(event) = hotkey_channel.try_recv() {
             if event.id() == config.read().hotkey().id() && event.state() == HotKeyState::Pressed {
-                match active_recording.take() {
-                    Some(mut recording) => {
-                        event_sender
-                            .send_event(WhispEvent::StateChanged(MicState::Inactive))
-                            .ok();
-                        match recording.finish() {
-                            Ok(Some(data)) => {
-                                if audio_pipeline.submit(data).is_err() {
-                                    error!("Failed to submit audio to processor");
-                                }
-                            }
-                            Ok(None) => {
-                                warn!("Recording finished but no data was recorded");
-                            }
-                            Err(e) => {
-                                error!(error = ?e, "Failed to finish recording");
+                let mic_state = match active_recording.take() {
+                    Some(mut recording) => match recording.finish() {
+                        Ok(Some(data)) => {
+                            if let Err(e) = audio_pipeline.submit(data) {
+                                error!("Failed to submit audio to processor: {}", e);
+                                MicState::Idle
+                            } else {
+                                MicState::Processing
                             }
                         }
-                    }
-                    None => {
-                        event_sender
-                            .send_event(WhispEvent::StateChanged(MicState::Activating))
-                            .ok();
-                        match recorder.start_recording(event_sender.clone()) {
-                            Ok(handle) => {
-                                active_recording = Some(handle);
-                            }
-                            Err(e) => {
-                                error!("Failed to start recording: {:?}", e);
-                            }
+                        Ok(None) => {
+                            warn!("Recording finished but no data was recorded");
+                            MicState::Idle
                         }
-                    }
-                }
+                        Err(e) => {
+                            error!(error = ?e, "Failed to finish recording");
+                            MicState::Idle
+                        }
+                    },
+                    None => match recorder.start_recording(event_sender.clone()) {
+                        Ok(handle) => {
+                            active_recording = Some(handle);
+                            MicState::Activating
+                        }
+                        Err(e) => {
+                            error!("Failed to start recording: {:?}", e);
+                            MicState::Idle
+                        }
+                    },
+                };
+                event_sender
+                    .send_event(WhispEvent::StateChanged(mic_state))
+                    .ok();
             }
         }
     });
@@ -225,10 +238,11 @@ fn paste(enigo: &mut Enigo) -> anyhow::Result<()> {
     #[cfg(not(target_os = "macos"))]
     let paste_modifier = Key::Control;
 
-    // a modifier key is needed to paste on linux
-
+    const SLEEP_TIME: std::time::Duration = std::time::Duration::from_millis(10);
     enigo.key(paste_modifier, Press)?;
+    sleep(SLEEP_TIME);
     enigo.key(Key::Unicode('v'), Click)?;
+    sleep(SLEEP_TIME);
     enigo.key(paste_modifier, Release)?;
 
     Ok(())

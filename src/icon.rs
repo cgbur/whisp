@@ -3,19 +3,26 @@ use std::sync::LazyLock;
 
 use tray_icon::Icon;
 
-pub const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
-const COLOR_WAITING: (u8, u8, u8) = (255, 223, 0);
-const COLOR_ACTIVE: (u8, u8, u8) = (0, 255, 0);
+use crate::color::{self, Color};
 
-static IDLE: LazyLock<Icon> = LazyLock::new(|| load_icon(ICON_PATH, None));
-static WAITING: LazyLock<Icon> = LazyLock::new(|| load_icon(ICON_PATH, Some(COLOR_WAITING)));
-static ACTIVE: LazyLock<Icon> = LazyLock::new(|| load_icon(ICON_PATH, Some(COLOR_ACTIVE)));
+pub const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
+
+fn load_color(color: Color) -> Icon {
+    const CHOOSE_FN: fn(Color) -> (u8, u8, u8) = |color| color.accessible_dark;
+    load_icon(ICON_PATH, Some(CHOOSE_FN(color)))
+}
+
+static IDLE: LazyLock<Icon> = LazyLock::new(|| load_color(color::WHITE));
+static WAITING: LazyLock<Icon> = LazyLock::new(|| load_color(color::YELLOW));
+static ACTIVE: LazyLock<Icon> = LazyLock::new(|| load_color(color::GREEN));
+static WORKING: LazyLock<Icon> = LazyLock::new(|| load_color(color::YELLOW));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MicState {
     Activating,
     Active,
-    Inactive,
+    Idle,
+    Processing,
 }
 
 impl MicState {
@@ -23,7 +30,8 @@ impl MicState {
         match self {
             MicState::Activating => WAITING.clone(),
             MicState::Active => ACTIVE.clone(),
-            MicState::Inactive => IDLE.clone(),
+            MicState::Idle => IDLE.clone(),
+            MicState::Processing => WORKING.clone(),
         }
     }
 }
