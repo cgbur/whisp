@@ -185,6 +185,9 @@ fn main() -> Result<()> {
                         }
                     }
                 }
+                WhispEvent::AudioError(_) => {
+                    warn!("Audio processing error recieved, author has not yet implemented this");
+                }
             };
         }
 
@@ -193,14 +196,14 @@ fn main() -> Result<()> {
             if event.id() == config.read().hotkey().id() && event.state() == HotKeyState::Pressed {
                 let mic_state = match active_recording.take() {
                     Some(mut recording) => match recording.finish() {
-                        Ok(Some(data)) => {
-                            if let Err(e) = audio_pipeline.submit(data) {
-                                error!("Failed to submit audio to processor: {}", e);
+                        Ok(Some(data)) => match audio_pipeline.submit(data) {
+                            Ok(whisp::process::SubmitResult::Discarded) => MicState::Idle,
+                            Ok(whisp::process::SubmitResult::Sent) => MicState::Processing,
+                            Err(e) => {
+                                error!("Failed to submit audio to processor: {:?}", e);
                                 MicState::Idle
-                            } else {
-                                MicState::Processing
                             }
-                        }
+                        },
                         Ok(None) => {
                             warn!("Recording finished but no data was recorded");
                             MicState::Idle
