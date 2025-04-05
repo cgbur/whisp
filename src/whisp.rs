@@ -186,7 +186,7 @@ fn main() -> Result<()> {
                     }
                 }
                 WhispEvent::AudioError(_) => {
-                    warn!("Audio processing error recieved, author has not yet implemented this");
+                    warn!("Audio processing error received, author has not yet implemented this");
                 }
             };
         }
