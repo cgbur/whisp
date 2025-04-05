@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
-const WHISPER_ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
-const DEFAULT_WHISPER_MODEL: &str = "whisper-1";
+const TRANSCRIPTION_ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
+const DEFAULT_MODEL: &str = "gpt-4o-transcribe";
 
 #[derive(Debug, Serialize, Clone)]
-struct WhisperRequest {
+struct TranscriptionRequest {
     pub file: Vec<u8>,
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -47,22 +47,17 @@ impl ModelClient {
         config: Arc<RwLock<Config>>,
         audio: Vec<u8>,
     ) -> anyhow::Result<String> {
-        let request = WhisperRequest {
+        let request = TranscriptionRequest {
             file: audio,
-            model: config
-                .read()
-                .model()
-                .unwrap_or(DEFAULT_WHISPER_MODEL)
-                .to_string(),
+            model: config.read().model().unwrap_or(DEFAULT_MODEL).to_string(),
             prompt: None,
             response_format: None,
             temperature: None,
             language: config.read().language().map(|l| l.to_string()),
         };
 
-        let response = self
-            .client
-            .post(WHISPER_ENDPOINT)
+        self.client
+            .post(TRANSCRIPTION_ENDPOINT)
             .header(
                 "Authorization",
                 format!(
@@ -83,8 +78,8 @@ impl ModelClient {
             .send()
             .await?
             .json::<WhisperResponse>()
-            .await?;
-
-        Ok(response.text)
+            .await
+            .map(|resp| resp.text)
+            .context("Failed to parse Whisper response")
     }
 }

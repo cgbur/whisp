@@ -6,4 +6,5 @@ use crate::icon::MicState;
 pub enum WhispEvent {
     StateChanged(MicState),
     TranscriptReady(String),
+    AudioError(Vec<u8>),
 }

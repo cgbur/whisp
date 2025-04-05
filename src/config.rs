@@ -55,6 +55,13 @@ pub struct Config {
         skip_serializing_if = "Config::is_default_discard_duration"
     )]
     discard_duration: f32,
+
+    /// Number of retries to make when the OpenAI API fails
+    #[serde(
+        default = "default_retries",
+        skip_serializing_if = "Config::is_default_retries"
+    )]
+    retries: u8,
 }
 
 impl PartialEq for Config {
@@ -79,6 +86,10 @@ fn default_discard_duration() -> f32 {
     0.5
 }
 
+fn default_retries() -> u8 {
+    5
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -92,6 +103,7 @@ impl Default for Config {
             restore_clipboard: false,
             auto_paste: default_auto_paste(),
             discard_duration: default_discard_duration(),
+            retries: default_retries(),
         }
     }
 }
@@ -133,6 +145,11 @@ impl Config {
         discard_duration == &Self::default().discard_duration
     }
 
+    /// Checks if the provided retries is the default value.
+    fn is_default_retries(retries: &u8) -> bool {
+        retries == &Self::default().retries
+    }
+
     /// Returns the language configuration.
     pub fn language(&self) -> Option<&str> {
         self.language.as_deref()
@@ -157,6 +174,11 @@ impl Config {
     /// Discard recordings under a certain duration
     pub fn discard_duration(&self) -> Duration {
         Duration::from_secs_f32(self.discard_duration)
+    }
+
+    /// Number of retries to make when the OpenAI API fails
+    pub fn retries(&self) -> u8 {
+        self.retries
     }
 }
 
@@ -289,6 +311,7 @@ mod tests {
             restore_clipboard: true,
             auto_paste: true,
             discard_duration: 0.5,
+            retries: 3,
         };
         let serialized =
             toml::to_string_pretty(&external_config).expect("Failed to serialize external config");
