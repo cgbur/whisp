@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 
 const TRANSCRIPTION_ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
-const DEFAULT_MODEL: &str = "gpt-4o-transcribe";
+const DEFAULT_MODEL: &str = "gpt-4o-mini-transcribe";
 
 #[derive(Debug, Serialize, Clone)]
 struct TranscriptionRequest {
