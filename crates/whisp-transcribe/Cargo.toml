@@ -6,10 +6,6 @@ description = "Transcription backend for whisp"
 license.workspace = true
 publish = false
 
-[[bin]]
-name = "transcribe-test"
-path = "src/bin/transcribe_test.rs"
-
 [features]
 default = []
 local-whisper = ["dep:whisper-rs", "dep:hound"]
