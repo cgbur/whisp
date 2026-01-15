@@ -108,6 +108,10 @@ fn main() -> Result<()> {
         }
     });
 
+    // Track hotkey state for paste timing (avoid paste while hotkey held)
+    let mut hotkey_held = false;
+    let mut pending_paste: Option<(String, Option<String>)> = None;
+
     // Create transcriber based on config
     let transcriber: Arc<dyn Transcriber> = {
         let cfg = config.read();
@@ -259,12 +263,18 @@ fn main() -> Result<()> {
                     }
 
                     if config.auto_paste {
-                        if let Err(e) = paste(&mut enigo) {
-                            warn!("Failed to paste transcription: {}", e);
-                        }
-                        if let Some(previous) = previous {
-                            if let Err(e) = clipboard.set_text(&previous) {
-                                warn!("Failed to restore clipboard text: {}", e);
+                        if hotkey_held {
+                            // Queue paste for when hotkey is released
+                            pending_paste = Some((text.clone(), previous));
+                        } else {
+                            // Paste immediately
+                            if let Err(e) = paste(&mut enigo) {
+                                warn!("Failed to paste transcription: {}", e);
+                            }
+                            if let Some(prev) = previous {
+                                if let Err(e) = clipboard.set_text(&prev) {
+                                    warn!("Failed to restore clipboard text: {}", e);
+                                }
                             }
                         }
                     }
@@ -277,40 +287,59 @@ fn main() -> Result<()> {
 
         // Handle hotkey events
         if let Ok(event) = hotkey_channel.try_recv() {
-            if event.id() == hotkey.id() && event.state() == HotKeyState::Pressed {
-                let mic_state = match active_recording.take() {
-                    Some(mut recording) => match recording.finish() {
-                        Ok(Some(data)) => match audio_pipeline.submit(data) {
-                            Ok(SubmitResult::Discarded) => MicState::Idle,
-                            Ok(SubmitResult::Sent) => MicState::Processing,
-                            Err(e) => {
-                                error!("Failed to submit audio to processor: {:?}", e);
-                                MicState::Idle
+            if event.id() == hotkey.id() {
+                match event.state() {
+                    HotKeyState::Pressed => {
+                        hotkey_held = true;
+                        let mic_state = match active_recording.take() {
+                            Some(mut recording) => match recording.finish() {
+                                Ok(Some(data)) => match audio_pipeline.submit(data) {
+                                    Ok(SubmitResult::Discarded) => MicState::Idle,
+                                    Ok(SubmitResult::Sent) => MicState::Processing,
+                                    Err(e) => {
+                                        error!("Failed to submit audio to processor: {:?}", e);
+                                        MicState::Idle
+                                    }
+                                },
+                                Ok(None) => {
+                                    warn!("Recording finished but no data was recorded");
+                                    MicState::Idle
+                                }
+                                Err(e) => {
+                                    error!(error = ?e, "Failed to finish recording");
+                                    MicState::Idle
+                                }
+                            },
+                            None => match recorder.start_recording(Some(audio_event_tx.clone())) {
+                                Ok(handle) => {
+                                    active_recording = Some(handle);
+                                    MicState::Activating
+                                }
+                                Err(e) => {
+                                    error!("Failed to start recording: {:?}", e);
+                                    MicState::Idle
+                                }
+                            },
+                        };
+                        event_sender
+                            .send_event(WhispEvent::StateChanged(mic_state))
+                            .ok();
+                    }
+                    HotKeyState::Released => {
+                        hotkey_held = false;
+                        // Execute pending paste if any
+                        if let Some((_text, previous)) = pending_paste.take() {
+                            if let Err(e) = paste(&mut enigo) {
+                                warn!("Failed to paste transcription: {}", e);
                             }
-                        },
-                        Ok(None) => {
-                            warn!("Recording finished but no data was recorded");
-                            MicState::Idle
+                            if let Some(prev) = previous {
+                                if let Err(e) = clipboard.set_text(&prev) {
+                                    warn!("Failed to restore clipboard text: {}", e);
+                                }
+                            }
                         }
-                        Err(e) => {
-                            error!(error = ?e, "Failed to finish recording");
-                            MicState::Idle
-                        }
-                    },
-                    None => match recorder.start_recording(Some(audio_event_tx.clone())) {
-                        Ok(handle) => {
-                            active_recording = Some(handle);
-                            MicState::Activating
-                        }
-                        Err(e) => {
-                            error!("Failed to start recording: {:?}", e);
-                            MicState::Idle
-                        }
-                    },
-                };
-                event_sender
-                    .send_event(WhispEvent::StateChanged(mic_state))
-                    .ok();
+                    }
+                }
             }
         }
     });
