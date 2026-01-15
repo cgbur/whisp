@@ -4,8 +4,6 @@ Cargo.lock
 test.wav
 TODO.md
 
-# Nix
-shell.nix
+# Nix (keep shell.nix, ignore flakes)
 flake.nix
 flake.lock
-CLAUDE.md

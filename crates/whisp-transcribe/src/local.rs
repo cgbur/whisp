@@ -22,15 +22,6 @@ pub struct LocalWhisperConfig {
     pub model_path: Option<PathBuf>,
 }
 
-impl Default for LocalWhisperConfig {
-    fn default() -> Self {
-        Self {
-            model: WhisperModel::default(),
-            model_path: None,
-        }
-    }
-}
-
 impl LocalWhisperConfig {
     /// Create a new config with the specified model.
     pub fn new(model: WhisperModel) -> Self {
@@ -272,9 +263,9 @@ mod tests {
     }
 
     #[test]
-    fn test_config_default() {
-        let config = LocalWhisperConfig::default();
-        assert_eq!(config.model, WhisperModel::BaseQ8);
+    fn test_config_new() {
+        let config = LocalWhisperConfig::new(WhisperModel::BaseQ8_0);
+        assert_eq!(config.model, WhisperModel::BaseQ8_0);
         assert!(config.model_path.is_none());
     }
 }

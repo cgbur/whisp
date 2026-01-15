@@ -125,11 +125,18 @@ fn main() -> Result<()> {
             }
             #[cfg(feature = "local-whisper")]
             TranscriptionBackend::Local => {
-                // Parse model name from config or use default
-                let model = cfg
-                    .local_model()
-                    .and_then(WhisperModel::from_name)
-                    .unwrap_or_default();
+                // Parse model name from config, or use default
+                let model = match cfg.local_model() {
+                    Some(name) => WhisperModel::from_name(name).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Unknown model '{}'. Available models:\n  {}\n\
+                             See https://huggingface.co/ggerganov/whisper.cpp for details.",
+                            name,
+                            WhisperModel::all_names().join("\n  ")
+                        )
+                    })?,
+                    None => WhisperModel::default(),
+                };
 
                 info!(model = ?model, "Using local Whisper backend");
 

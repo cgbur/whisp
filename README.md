@@ -48,13 +48,7 @@ cargo install whisp --features local-whisper
 
 **Requirements for local whisper:**
 
-- **CMake** must be installed
-- On **macOS Apple Silicon**, add the following to `~/.cargo/config.toml`:
-
-```toml
-[target.aarch64-apple-darwin]
-rustflags = "-lc++ -l framework=Accelerate"
-```
+- **CMake** must be installed (for building whisper.cpp)
 
 The local backend uses Metal GPU acceleration on Mac for fast transcription.
 
@@ -80,13 +74,16 @@ auto_paste = true
 
 ```toml
 backend = "local"
-local_model = "base-q8"
+local_model = "base.en-q8_0"
 hotkey = "shift+super+Semicolon"
 language = "en"
 ```
 
 On first launch with local backend, the model will be automatically downloaded
-(~82MB for base-q8).
+(~78 MiB for base.en-q8_0).
+
+**Note:** The default model (`base.en-q8_0`) is English-only. If you need
+multilingual support, use a non-English model like `base-q8_0` or `small-q8_0`.
 
 ### Configuration Options
 
@@ -95,7 +92,7 @@ On first launch with local backend, the model will be automatically downloaded
 | `backend`           | `openai`                 | Transcription backend: `openai` or `local`           |
 | `hotkey`            | `shift+super+Semicolon`  | Global hotkey to trigger recording                   |
 | `openai_key`        | (required for openai)    | Your OpenAI API key                                  |
-| `local_model`       | `base-q8`                | Local Whisper model (see table below)                |
+| `local_model`       | `base.en-q8_0`           | Local Whisper model (see table below)                |
 | `language`          | (none)                   | Language hint for transcription (e.g., "en")         |
 | `model`             | `gpt-4o-mini-transcribe` | OpenAI transcription model                           |
 | `restore_clipboard` | `false`                  | Restore clipboard contents after pasting             |
@@ -105,15 +102,45 @@ On first launch with local backend, the model will be automatically downloaded
 
 ### Available Local Models
 
-| Model               | Size    | Notes                        |
-| ------------------- | ------- | ---------------------------- |
-| `tiny-q8`           | ~44 MB  | Fastest, lowest quality      |
-| `base-q8`           | ~82 MB  | Good default                 |
-| `small-q8`          | ~264 MB | Better quality               |
-| `medium-q8`         | ~823 MB | High quality                 |
-| `large-v3-turbo-q5` | ~574 MB | Best speed/quality ratio     |
+Models are downloaded from [ggerganov/whisper.cpp on HuggingFace](https://huggingface.co/ggerganov/whisper.cpp).
+Model names must match exactly as shown below.
 
-English-only variants (faster for English): `tiny-en`, `base-en`, `small-en`, `medium-en`
+| Model | Size | Notes |
+| --- | --- | --- |
+| `tiny` | 75 MiB | Fastest |
+| `tiny-q5_1` | 31 MiB | |
+| `tiny-q8_0` | 42 MiB | |
+| `tiny.en` | 75 MiB | English-only |
+| `tiny.en-q5_1` | 31 MiB | |
+| `tiny.en-q8_0` | 42 MiB | |
+| `base` | 142 MiB | |
+| `base-q5_1` | 57 MiB | |
+| `base-q8_0` | 78 MiB | |
+| `base.en` | 142 MiB | English-only |
+| `base.en-q5_1` | 57 MiB | |
+| `base.en-q8_0` | 78 MiB | **Default**, English-only |
+| `small` | 466 MiB | |
+| `small-q5_1` | 181 MiB | |
+| `small-q8_0` | 252 MiB | |
+| `small.en` | 466 MiB | English-only |
+| `small.en-q5_1` | 181 MiB | |
+| `small.en-q8_0` | 252 MiB | |
+| `small.en-tdrz` | 465 MiB | Tinydiarize |
+| `medium` | 1.5 GiB | |
+| `medium-q5_0` | 514 MiB | |
+| `medium-q8_0` | 785 MiB | |
+| `medium.en` | 1.5 GiB | English-only |
+| `medium.en-q5_0` | 514 MiB | |
+| `medium.en-q8_0` | 785 MiB | |
+| `large-v1` | 2.9 GiB | |
+| `large-v2` | 2.9 GiB | |
+| `large-v2-q5_0` | 1.1 GiB | |
+| `large-v2-q8_0` | 1.5 GiB | |
+| `large-v3` | 2.9 GiB | |
+| `large-v3-q5_0` | 1.1 GiB | |
+| `large-v3-turbo` | 1.5 GiB | Best speed/quality |
+| `large-v3-turbo-q5_0` | 547 MiB | |
+| `large-v3-turbo-q8_0` | 834 MiB | |
 
 ## Usage
 
