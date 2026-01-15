@@ -8,7 +8,9 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use tracing::{debug, info};
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+};
 
 use crate::model::{WhisperModel, model_path};
 use crate::{Result, TranscribeError, Transcriber};
@@ -38,11 +40,30 @@ impl LocalWhisperConfig {
     }
 }
 
+/// Holds the WhisperContext and a reusable WhisperState.
+struct WhisperInstance {
+    /// Kept alive to ensure state remains valid.
+    _context: WhisperContext,
+    state: WhisperState,
+}
+
+impl WhisperInstance {
+    fn new(context: WhisperContext) -> Result<Self> {
+        let state = context.create_state().map_err(|e| {
+            TranscribeError::TranscriptionFailed(format!("Failed to create state: {}", e))
+        })?;
+        Ok(Self {
+            _context: context,
+            state,
+        })
+    }
+}
+
 /// Local Whisper transcriber using whisper.cpp.
 pub struct LocalWhisperClient {
     config: LocalWhisperConfig,
-    /// Lazily initialized whisper context.
-    context: Mutex<Option<WhisperContext>>,
+    /// Lazily initialized whisper instance (context + reusable state).
+    instance: Mutex<Option<WhisperInstance>>,
 }
 
 impl LocalWhisperClient {
@@ -50,14 +71,14 @@ impl LocalWhisperClient {
     pub fn new(config: LocalWhisperConfig) -> Self {
         Self {
             config,
-            context: Mutex::new(None),
+            instance: Mutex::new(None),
         }
     }
 
-    /// Get or initialize the whisper context, returning a guard.
-    fn ensure_context(&self) -> Result<std::sync::MutexGuard<'_, Option<WhisperContext>>> {
-        let mut guard = self.context.lock().map_err(|e| {
-            TranscribeError::TranscriptionFailed(format!("Failed to lock context: {}", e))
+    /// Get or initialize the whisper instance, returning a guard.
+    fn ensure_instance(&self) -> Result<std::sync::MutexGuard<'_, Option<WhisperInstance>>> {
+        let mut guard = self.instance.lock().map_err(|e| {
+            TranscribeError::TranscriptionFailed(format!("Failed to lock instance: {}", e))
         })?;
         if guard.is_none() {
             let path = match &self.config.model_path {
@@ -78,8 +99,9 @@ impl LocalWhisperClient {
                 TranscribeError::TranscriptionFailed(format!("Failed to load model: {}", e))
             })?;
 
+            let instance = WhisperInstance::new(ctx)?;
             info!("Whisper model loaded successfully");
-            *guard = Some(ctx);
+            *guard = Some(instance);
         }
         Ok(guard)
     }
@@ -194,24 +216,18 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
 #[async_trait]
 impl Transcriber for LocalWhisperClient {
     async fn transcribe(&self, audio: &[u8], language: Option<&str>) -> Result<String> {
-        // Convert audio to the format whisper expects (this is CPU work, do it outside spawn_blocking)
+        // Convert audio to the format whisper expects
         let samples = self.convert_audio(audio)?;
-        let language = language.map(|s| s.to_string());
 
-        // Get the context (ensures model is loaded)
-        let context = self.ensure_context()?;
-        let ctx = context.as_ref().expect("context should be initialized");
-
-        // Create a new state for this transcription
-        let mut state = ctx.create_state().map_err(|e| {
-            TranscribeError::TranscriptionFailed(format!("Failed to create state: {}", e))
-        })?;
+        // Get the instance (ensures model is loaded)
+        let mut guard = self.ensure_instance()?;
+        let instance = guard.as_mut().expect("instance should be initialized");
 
         // Configure transcription parameters
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
 
         // Set language if provided
-        if let Some(ref lang) = language {
+        if let Some(lang) = language {
             params.set_language(Some(lang));
         } else {
             // Auto-detect language
@@ -225,21 +241,20 @@ impl Transcriber for LocalWhisperClient {
         params.set_print_timestamps(false);
 
         // Run transcription
-        state.full(params, &samples).map_err(|e| {
+        instance.state.full(params, &samples).map_err(|e| {
             TranscribeError::TranscriptionFailed(format!("Transcription failed: {}", e))
         })?;
 
         // Collect all segments into the result
-        let num_segments = state.full_n_segments().map_err(|e| {
-            TranscribeError::TranscriptionFailed(format!("Failed to get segments: {}", e))
-        })?;
+        let num_segments = instance.state.full_n_segments();
 
         let mut result = String::new();
         for i in 0..num_segments {
-            let segment = state.full_get_segment_text(i).map_err(|e| {
-                TranscribeError::TranscriptionFailed(format!("Failed to get segment {}: {}", i, e))
-            })?;
-            result.push_str(&segment);
+            if let Some(segment) = instance.state.get_segment(i) {
+                if let Ok(text) = segment.to_str_lossy() {
+                    result.push_str(&text);
+                }
+            }
         }
 
         Ok(result.trim().to_string())
