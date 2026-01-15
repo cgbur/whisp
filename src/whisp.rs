@@ -24,8 +24,10 @@ use whisp::notify::NotificationLayer;
 use whisp::process::{AudioPipeline, SubmitResult};
 use whisp::{
     AudioEvent, ConfigManager, DEFAULT_LOG_LEVEL, MicState, OpenAIClient, OpenAIConfig, Recorder,
-    RecordingHandle, Transcriber, VERSION,
+    RecordingHandle, Transcriber, TranscriptionBackend, VERSION,
 };
+#[cfg(feature = "local-whisper")]
+use whisp::{LocalWhisperClient, LocalWhisperConfig, WhisperModel, ensure_model};
 
 fn main() -> Result<()> {
     // Initialize the logger
@@ -109,15 +111,59 @@ fn main() -> Result<()> {
     // Create transcriber based on config
     let transcriber: Arc<dyn Transcriber> = {
         let cfg = config.read();
-        let api_key = cfg
-            .key_openai()
-            .context("OpenAI API key not configured")?
-            .to_string();
-        let mut openai_config = OpenAIConfig::new(api_key);
-        if let Some(model) = cfg.model() {
-            openai_config = openai_config.with_model(model);
+        match cfg.backend() {
+            TranscriptionBackend::OpenAI => {
+                let api_key = cfg
+                    .key_openai()
+                    .context("OpenAI API key not configured")?
+                    .to_string();
+                let mut openai_config = OpenAIConfig::new(api_key);
+                if let Some(model) = cfg.model() {
+                    openai_config = openai_config.with_model(model);
+                }
+                Arc::new(OpenAIClient::new(openai_config))
+            }
+            #[cfg(feature = "local-whisper")]
+            TranscriptionBackend::Local => {
+                // Parse model name from config or use default
+                let model = cfg
+                    .local_model()
+                    .and_then(WhisperModel::from_name)
+                    .unwrap_or_default();
+
+                info!(model = ?model, "Using local Whisper backend");
+
+                // Ensure model is downloaded before continuing
+                let rt = tokio::runtime::Runtime::new()
+                    .context("Failed to create tokio runtime for model download")?;
+
+                rt.block_on(async {
+                    ensure_model(model, |downloaded, total| {
+                        let percent = (downloaded as f64 / total as f64 * 100.0) as u32;
+                        if percent % 25 == 0 {
+                            info!(
+                                downloaded_mb = downloaded / 1_000_000,
+                                total_mb = total / 1_000_000,
+                                percent = percent,
+                                "Downloading model"
+                            );
+                        }
+                    })
+                    .await
+                })
+                .context("Failed to download Whisper model")?;
+
+                let local_config = LocalWhisperConfig::new(model);
+                Arc::new(LocalWhisperClient::new(local_config))
+            }
+            #[cfg(not(feature = "local-whisper"))]
+            TranscriptionBackend::Local => {
+                anyhow::bail!(
+                    "Local whisper backend requested but not compiled in. \
+                     Rebuild with --features local-whisper"
+                );
+            }
         }
-        Arc::new(OpenAIClient::new(openai_config))
     };
 
     // Set up processor for handling audio data async operations

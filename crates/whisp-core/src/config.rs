@@ -8,11 +8,39 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use dirs::config_dir;
+use dirs::{config_dir, data_local_dir};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::APP_NAME;
+
+/// Transcription backend to use.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TranscriptionBackend {
+    /// Use OpenAI's Whisper API (requires API key)
+    #[default]
+    OpenAI,
+    /// Use local Whisper model (requires local-whisper feature)
+    Local,
+}
+
+/// Returns the default data directory for whisp.
+///
+/// This is where downloaded models and other data are stored.
+pub fn default_data_dir() -> Result<PathBuf> {
+    let data_dir = data_local_dir().context("Failed to get data local directory")?;
+    Ok(data_dir.join("whisp"))
+}
+
+/// Returns the directory where Whisper models are stored.
+pub fn models_dir() -> Result<PathBuf> {
+    Ok(default_data_dir()?.join("models"))
+}
+
+fn is_default_backend(v: &TranscriptionBackend) -> bool {
+    *v == TranscriptionBackend::OpenAI
+}
 
 /// Core configuration structure for the application.
 ///
@@ -20,15 +48,24 @@ use crate::APP_NAME;
 /// settings like hotkeys are handled separately by the main application.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
-    /// OpenAI API key
+    /// Transcription backend to use (openai or local)
+    #[serde(default, skip_serializing_if = "is_default_backend")]
+    pub backend: TranscriptionBackend,
+
+    /// OpenAI API key (required for openai backend)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openai_key: Option<String>,
+
+    /// Local whisper model to use (e.g., "base-q8", "small-q8", "large-v3-turbo-q5")
+    /// Only used when backend is "local"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_model: Option<String>,
 
     /// Preferred language for transcription (ISO 639-1 code)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
 
-    /// Model to use for transcriptions
+    /// Model to use for OpenAI transcriptions
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 
@@ -91,7 +128,9 @@ fn is_default_retries(v: &u8) -> bool {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            backend: TranscriptionBackend::default(),
             openai_key: None,
+            local_model: None,
             language: None,
             model: None,
             restore_clipboard: false,
@@ -104,9 +143,19 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Get the transcription backend
+    pub fn backend(&self) -> &TranscriptionBackend {
+        &self.backend
+    }
+
     /// Get the OpenAI API key
     pub fn key_openai(&self) -> Option<&str> {
         self.openai_key.as_deref()
+    }
+
+    /// Get the local whisper model name
+    pub fn local_model(&self) -> Option<&str> {
+        self.local_model.as_deref()
     }
 
     /// Get the preferred language
@@ -114,7 +163,7 @@ impl Config {
         self.language.as_deref()
     }
 
-    /// Get the model name
+    /// Get the OpenAI model name
     pub fn model(&self) -> Option<&str> {
         self.model.as_deref()
     }
@@ -162,7 +211,7 @@ impl ConfigManager {
         let config: Config = toml::from_str(&config_content)
             .with_context(|| format!("Failed to parse config file at {:?}", self.config_path))?;
 
-        if config.key_openai().is_none() {
+        if config.backend == TranscriptionBackend::OpenAI && config.key_openai().is_none() {
             warn!(
                 "OpenAI API key is not set. Transcriptions will not work without it. \
                  Copy the config path via the tray icon to set the key."

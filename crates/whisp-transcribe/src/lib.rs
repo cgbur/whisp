@@ -1,11 +1,20 @@
 //! Transcription backend library for whisp.
 //!
 //! This crate provides a trait-based abstraction for audio transcription,
-//! with implementations for OpenAI's Whisper API and (future) local models.
+//! with implementations for OpenAI's Whisper API and local Whisper models.
 
 mod openai;
 
+#[cfg(feature = "local-whisper")]
+mod local;
+#[cfg(feature = "local-whisper")]
+mod model;
+
 use async_trait::async_trait;
+#[cfg(feature = "local-whisper")]
+pub use local::{LocalWhisperClient, LocalWhisperConfig};
+#[cfg(feature = "local-whisper")]
+pub use model::{WhisperModel, download_model, ensure_model, model_exists, model_path};
 pub use openai::{OpenAIClient, OpenAIConfig};
 use thiserror::Error;
 

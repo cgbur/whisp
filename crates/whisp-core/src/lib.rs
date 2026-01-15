@@ -7,7 +7,7 @@ mod config;
 mod event;
 mod state;
 
-pub use config::{Config, ConfigManager};
+pub use config::{Config, ConfigManager, TranscriptionBackend, default_data_dir, models_dir};
 pub use event::{AudioEvent, RecordingState};
 pub use state::MicState;
 

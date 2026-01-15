@@ -10,11 +10,27 @@ publish = false
 name = "transcribe-test"
 path = "src/bin/transcribe_test.rs"
 
+[features]
+default = []
+local-whisper = ["dep:whisper-rs", "dep:hound"]
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+futures-util.workspace = true
+parking_lot.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+whisp-core.workspace = true
+
+# Optional dependencies for local whisper
+hound = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+whisper-rs = { workspace = true, optional = true, features = ["tracing_backend", "metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+whisper-rs = { workspace = true, optional = true, features = ["tracing_backend"] }
