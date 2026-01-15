@@ -207,13 +207,8 @@ impl Transcriber for LocalWhisperClient {
         let samples = self.convert_audio(audio)?;
         let language = language.map(|s| s.to_string());
 
-        // Ensure model is loaded
-        self.ensure_context()?;
-
-        // Get the context
-        let context = self.context.lock().map_err(|e| {
-            TranscribeError::TranscriptionFailed(format!("Failed to lock context: {}", e))
-        })?;
+        // Get the context (ensures model is loaded)
+        let context = self.ensure_context()?;
         let ctx = context.as_ref().expect("context should be initialized");
 
         // Create a new state for this transcription

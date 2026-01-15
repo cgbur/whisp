@@ -97,10 +97,13 @@ async fn transcribe(
     let audio: Arc<[u8]> = recording.into_data().into();
     let bytes = audio.len();
 
-    let config_read = config.read();
-    let mut num_retries = config_read.retries;
-    let language = config_read.language().map(|s| s.to_string());
-    drop(config_read);
+    let (mut num_retries, language) = {
+        let config_read = config.read();
+        (
+            config_read.retries,
+            config_read.language().map(|s| s.to_string()),
+        )
+    };
 
     let mut before = Instant::now();
     let mut result = transcriber.transcribe(&audio, language.as_deref()).await;
