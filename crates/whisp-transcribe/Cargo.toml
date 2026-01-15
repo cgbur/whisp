@@ -1,0 +1,20 @@
+[package]
+name = "whisp-transcribe"
+version = "0.1.0"
+edition.workspace = true
+description = "Transcription backend for whisp"
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "transcribe-test"
+path = "src/bin/transcribe_test.rs"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true

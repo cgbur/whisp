@@ -1,10 +1,61 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/cgbur/whisp"
+
+[workspace.dependencies]
+# Workspace crates
+whisp-core = { path = "crates/whisp-core" }
+whisp-audio = { path = "crates/whisp-audio" }
+whisp-transcribe = { path = "crates/whisp-transcribe" }
+
+# Core dependencies
+anyhow = "1.0"
+async-trait = "0.1"
+parking_lot = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Audio
+cpal = "0.15"
+hound = "3.5"
+
+# Config
+dirs = "5.0"
+toml = "0.8"
+
+# HTTP
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+
+# UI/System integration
+arboard = { version = "3.4", default-features = false }
+enigo = "0.2"
+global-hotkey = { version = "0.6", features = ["serde"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+notify-rust = "4.11"
+tao = "0.30"
+tray-icon = "0.19"
+
+# macOS
+core-foundation = "0.10"
+
+# Dev
+tempfile = "3.13"
+
 [package]
 name = "whisp"
 version = "0.1.4"
-edition = "2021"
+edition.workspace = true
 description = "Unobtrusive global speech-to-text"
-license = "MIT"
-repository = "https://github.com/cgbur/whisp"
+license.workspace = true
+repository.workspace = true
 homepage = "https://github.com/cgbur/whisp"
 documentation = "https://docs.rs/whisp"
 keywords = ["speech-to-text", "transcribe", "dictation"]
@@ -16,31 +67,30 @@ path = "src/whisp.rs"
 name = "whisp"
 
 [dependencies]
-anyhow = "1.0.89"
-arboard = { version = "3.4.1", default-features = false }
-cpal = "0.15.3"
-dirs = "5.0.1"
-enigo = "0.2.1"
-global-hotkey = { version = "0.6.2", features = ["serde"] }
-hound = "3.5.1"
-image = { version = "0.25.2", default-features = false, features = ["png"] }
-notify-rust = "4.11.3"
-parking_lot = "0.12.3"
-reqwest = { version = "0.12.8", features = ["json", "multipart"] }
-serde = { version = "1.0.210", features = ["derive"] }
-tao = "0.30.3"
-thiserror = "1.0.64"
-tokio = { version = "1.40.0", features = ["rt-multi-thread"] }
-toml = "0.8.19"
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-tray-icon = "0.19.0"
+whisp-core.workspace = true
+whisp-audio.workspace = true
+whisp-transcribe.workspace = true
+
+anyhow.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+arboard.workspace = true
+enigo.workspace = true
+global-hotkey.workspace = true
+image.workspace = true
+notify-rust.workspace = true
+tao.workspace = true
+tray-icon.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = "0.10.0"
+core-foundation.workspace = true
 
 [dev-dependencies]
-tempfile = "3.13.0"
+tempfile.workspace = true
 
 [profile.release-lto]
 inherits = "release"

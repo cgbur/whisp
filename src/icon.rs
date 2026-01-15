@@ -1,9 +1,12 @@
+//! Tray icon management.
+
 use std::path::Path;
 use std::sync::LazyLock;
 
 use tray_icon::Icon;
 
 use crate::color::{self, Color};
+use crate::MicState;
 
 pub const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
 
@@ -17,16 +20,14 @@ static WAITING: LazyLock<Icon> = LazyLock::new(|| load_color(color::YELLOW));
 static ACTIVE: LazyLock<Icon> = LazyLock::new(|| load_color(color::GREEN));
 static WORKING: LazyLock<Icon> = LazyLock::new(|| load_color(color::YELLOW));
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MicState {
-    Activating,
-    Active,
-    Idle,
-    Processing,
+/// Extension trait to get icons for MicState.
+pub trait MicStateIcon {
+    /// Get the tray icon for this state.
+    fn icon(&self) -> Icon;
 }
 
-impl MicState {
-    pub fn icon(&self) -> Icon {
+impl MicStateIcon for MicState {
+    fn icon(&self) -> Icon {
         match self {
             MicState::Activating => WAITING.clone(),
             MicState::Active => ACTIVE.clone(),

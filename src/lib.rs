@@ -1,13 +1,21 @@
-pub const APP_NAME: &str = "whisp";
-pub const APP_NAME_PRETTY: &str = "Whisp";
-pub const DEFAULT_LOG_LEVEL: &str = "info";
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+// Re-export from sub-crates
+pub use whisp_core::{
+    AudioEvent, Config, ConfigManager, MicState, RecordingState, APP_NAME, APP_NAME_PRETTY,
+    DEFAULT_LOG_LEVEL,
+};
+pub use whisp_audio::{Recorder, RecorderError, Recording, RecordingHandle};
+pub use whisp_transcribe::{
+    OpenAIClient, OpenAIConfig, TranscribeError, TranscribeRequest, TranscribeResponse,
+    Transcriber,
+};
 
+// App-specific modules
 mod color;
-pub mod config;
+pub mod config_ext;
 pub mod event;
 pub mod icon;
-pub mod models;
 pub mod notify;
 pub mod process;
-pub mod record;
+
+// Version from this crate
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

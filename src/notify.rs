@@ -1,4 +1,4 @@
-//! Send system notifications.
+//! System notifications.
 
 use notify_rust::Notification;
 use tracing::field::{Field, Visit};
@@ -21,7 +21,7 @@ pub fn notify(summary: &str, body: &str) {
         .ok();
 }
 
-// Visitor to extract the message field from the event
+/// Visitor to extract the message field from tracing events.
 struct MessageVisitor {
     message: Option<String>,
 }
@@ -44,10 +44,9 @@ impl Visit for MessageVisitor {
             self.message = Some(format!("{:?}", value));
         }
     }
-
-    // Implement other record_* methods if needed
 }
 
+/// Tracing layer that sends notifications for warnings and errors.
 #[derive(Debug, Default)]
 pub struct NotificationLayer {}
 
