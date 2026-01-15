@@ -355,8 +355,9 @@ fn paste(enigo: &mut Enigo) -> anyhow::Result<()> {
     let paste_modifier = Key::Control;
 
     const SLEEP_TIME: std::time::Duration = std::time::Duration::from_millis(10);
+    const MODIFIER_SLEEP: std::time::Duration = std::time::Duration::from_millis(20);
     enigo.key(paste_modifier, Press)?;
-    sleep(SLEEP_TIME);
+    sleep(MODIFIER_SLEEP);
     enigo.key(Key::Unicode('v'), Click)?;
     sleep(SLEEP_TIME);
     enigo.key(paste_modifier, Release)?;
