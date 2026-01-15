@@ -2,9 +2,8 @@
 //!
 //! Usage: transcribe-test <audio_file> <api_key> [model]
 
-use std::env;
-use std::fs;
 use std::time::Instant;
+use std::{env, fs};
 
 use whisp_transcribe::{OpenAIClient, OpenAIConfig, Transcriber};
 

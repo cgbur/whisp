@@ -1,7 +1,6 @@
 //! Whisp - Unobtrusive global speech-to-text.
 
-use std::sync::mpsc;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::thread::sleep;
 
@@ -13,20 +12,19 @@ use parking_lot::RwLock;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 use tracing::{error, info, warn};
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
-
-use whisp::config_ext::{default_hotkey, ConfigExt};
+use whisp::config_ext::{ConfigExt, default_hotkey};
 use whisp::event::WhispEvent;
 use whisp::icon::MicStateIcon;
 use whisp::notify::NotificationLayer;
 use whisp::process::{AudioPipeline, SubmitResult};
 use whisp::{
-    AudioEvent, ConfigManager, MicState, OpenAIClient, OpenAIConfig, Recorder, RecordingHandle,
-    Transcriber, DEFAULT_LOG_LEVEL, VERSION,
+    AudioEvent, ConfigManager, DEFAULT_LOG_LEVEL, MicState, OpenAIClient, OpenAIConfig, Recorder,
+    RecordingHandle, Transcriber, VERSION,
 };
 
 fn main() -> Result<()> {

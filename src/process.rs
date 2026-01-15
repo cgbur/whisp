@@ -47,7 +47,10 @@ impl AudioPipeline {
 
         let transcription_handles = start_results_collector(&runtime, event_sender)?;
 
-        info!(transcriber = transcriber.name(), "Audio pipeline initialized");
+        info!(
+            transcriber = transcriber.name(),
+            "Audio pipeline initialized"
+        );
 
         Ok(Self {
             runtime,
@@ -77,7 +80,9 @@ impl AudioPipeline {
 
         let transcriber = self.transcriber.clone();
         let config = self.config.clone();
-        let handle = self.runtime.spawn(transcribe(transcriber, config, recording));
+        let handle = self
+            .runtime
+            .spawn(transcribe(transcriber, config, recording));
 
         self.transcription_handles.send(handle)?;
         Ok(SubmitResult::Sent)

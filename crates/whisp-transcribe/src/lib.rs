@@ -5,9 +5,8 @@
 
 mod openai;
 
-pub use openai::{OpenAIClient, OpenAIConfig};
-
 use async_trait::async_trait;
+pub use openai::{OpenAIClient, OpenAIConfig};
 use thiserror::Error;
 
 /// Errors that can occur during transcription.

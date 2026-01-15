@@ -1,9 +1,9 @@
 // Re-export from sub-crates
-pub use whisp_core::{
-    AudioEvent, Config, ConfigManager, MicState, RecordingState, APP_NAME, APP_NAME_PRETTY,
-    DEFAULT_LOG_LEVEL,
-};
 pub use whisp_audio::{Recorder, RecorderError, Recording, RecordingHandle};
+pub use whisp_core::{
+    APP_NAME, APP_NAME_PRETTY, AudioEvent, Config, ConfigManager, DEFAULT_LOG_LEVEL, MicState,
+    RecordingState,
+};
 pub use whisp_transcribe::{OpenAIClient, OpenAIConfig, TranscribeError, Transcriber};
 
 // App-specific modules

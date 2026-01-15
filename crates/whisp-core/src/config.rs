@@ -48,7 +48,10 @@ pub struct Config {
     pub discard_duration: f32,
 
     /// Number of retries for failed transcription requests
-    #[serde(default = "default_retries", skip_serializing_if = "is_default_retries")]
+    #[serde(
+        default = "default_retries",
+        skip_serializing_if = "is_default_retries"
+    )]
     pub retries: u8,
 
     /// Hotkey configuration (stored as string, parsed by app)
@@ -196,8 +199,9 @@ impl ConfigManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
+    use super::*;
 
     #[test]
     fn test_default_config() {

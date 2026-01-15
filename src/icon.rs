@@ -5,8 +5,8 @@ use std::sync::LazyLock;
 
 use tray_icon::Icon;
 
-use crate::color::{self, Color};
 use crate::MicState;
+use crate::color::{self, Color};
 
 pub const ICON_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png");
 

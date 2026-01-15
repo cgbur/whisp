@@ -10,17 +10,16 @@
 //! in about 4m30s. This is sufficient for most dictation use cases.
 
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Host;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavSpec, WavWriter};
 use parking_lot::Mutex;
 use thiserror::Error;
 use tracing::{error, info};
-
 use whisp_core::{AudioEvent, MicState, RecordingState};
 
 /// Errors that can occur during recording.
@@ -150,7 +149,7 @@ impl Recorder {
                 return Err(RecorderError::SampleFormatNotSupported(format!(
                     "{:?}",
                     sample_format
-                )))
+                )));
             }
         };
 
@@ -226,12 +225,9 @@ impl RecordingHandle {
 
         self.stream.pause().ok();
 
-        self.writer
-            .lock()
-            .take()
-            .unwrap()
-            .finalize()
-            .map_err(|e| RecorderError::Anyhow(anyhow::anyhow!("Failed to finalize writer: {}", e)))?;
+        self.writer.lock().take().unwrap().finalize().map_err(|e| {
+            RecorderError::Anyhow(anyhow::anyhow!("Failed to finalize writer: {}", e))
+        })?;
 
         let data = buffer.try_into_inner()?;
 
