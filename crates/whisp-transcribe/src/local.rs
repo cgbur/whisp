@@ -4,7 +4,6 @@
 //! via whisper-rs bindings.
 
 use std::path::PathBuf;
-use std::sync::OnceLock;
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
@@ -52,7 +51,7 @@ impl LocalWhisperConfig {
 pub struct LocalWhisperClient {
     config: LocalWhisperConfig,
     /// Lazily initialized whisper context.
-    context: OnceLock<Mutex<WhisperContext>>,
+    context: Mutex<Option<WhisperContext>>,
 }
 
 impl LocalWhisperClient {
@@ -60,13 +59,14 @@ impl LocalWhisperClient {
     pub fn new(config: LocalWhisperConfig) -> Self {
         Self {
             config,
-            context: OnceLock::new(),
+            context: Mutex::new(None),
         }
     }
 
-    /// Get or initialize the whisper context.
-    fn get_context(&self) -> Result<&Mutex<WhisperContext>> {
-        self.context.get_or_try_init(|| {
+    /// Get or initialize the whisper context, returning a guard.
+    fn ensure_context(&self) -> Result<parking_lot::MutexGuard<'_, Option<WhisperContext>>> {
+        let mut guard = self.context.lock();
+        if guard.is_none() {
             let path = match &self.config.model_path {
                 Some(p) => p.clone(),
                 None => model_path(self.config.model)
@@ -86,8 +86,9 @@ impl LocalWhisperClient {
             })?;
 
             info!("Whisper model loaded successfully");
-            Ok(Mutex::new(ctx))
-        })
+            *guard = Some(ctx);
+        }
+        Ok(guard)
     }
 
     /// Convert WAV audio data to 16kHz mono f32 samples.
@@ -136,6 +137,8 @@ impl LocalWhisperClient {
             }
         };
 
+        let original_sample_count = samples.len();
+
         // Convert to mono if stereo
         let mono_samples: Vec<f32> = if channels > 1 {
             samples
@@ -155,7 +158,7 @@ impl LocalWhisperClient {
         };
 
         debug!(
-            original_samples = samples.len(),
+            original_samples = original_sample_count,
             resampled_samples = resampled.len(),
             "Audio conversion complete"
         );
@@ -202,8 +205,8 @@ impl Transcriber for LocalWhisperClient {
         let samples = self.convert_audio(audio)?;
 
         // Get the whisper context
-        let ctx_guard = self.get_context()?;
-        let ctx = ctx_guard.lock();
+        let ctx_guard = self.ensure_context()?;
+        let ctx = ctx_guard.as_ref().expect("context should be initialized");
 
         // Create a new state for this transcription
         let mut state = ctx.create_state().map_err(|e| {
