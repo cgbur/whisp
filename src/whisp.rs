@@ -17,7 +17,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
-use whisp::config_ext::{ConfigExt, default_hotkey};
+use whisp::config_ext::ConfigExt;
 use whisp::event::WhispEvent;
 use whisp::icon::MicStateIcon;
 use whisp::notify::NotificationLayer;
@@ -138,13 +138,17 @@ fn main() -> Result<()> {
                     .context("Failed to create tokio runtime for model download")?;
 
                 rt.block_on(async {
-                    ensure_model(model, |downloaded, total| {
+                    use std::sync::atomic::{AtomicU32, Ordering};
+                    let last_milestone = AtomicU32::new(u32::MAX); // u32::MAX = not set
+                    ensure_model(model, move |downloaded, total| {
                         let percent = (downloaded as f64 / total as f64 * 100.0) as u32;
-                        if percent % 25 == 0 {
+                        let milestone = percent / 25 * 25; // Round down to nearest 25
+                        let prev = last_milestone.swap(milestone, Ordering::Relaxed);
+                        if prev != milestone {
                             info!(
                                 downloaded_mb = downloaded / 1_000_000,
                                 total_mb = total / 1_000_000,
-                                percent = percent,
+                                percent = milestone,
                                 "Downloading model"
                             );
                         }

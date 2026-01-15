@@ -3,3 +3,9 @@
 Cargo.lock
 test.wav
 TODO.md
+
+# Nix
+shell.nix
+flake.nix
+flake.lock
+CLAUDE.md
