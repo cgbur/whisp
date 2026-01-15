@@ -4,7 +4,6 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
 use global_hotkey::hotkey::{HotKey, Modifiers};
 use parking_lot::RwLock;
 
@@ -35,20 +34,5 @@ impl ConfigExt for Config {
 impl ConfigExt for Arc<RwLock<Config>> {
     fn hotkey(&self) -> HotKey {
         self.read().hotkey()
-    }
-}
-
-/// App configuration that wraps core Config with hotkey support.
-pub struct AppConfig {
-    pub inner: Config,
-    pub hotkey: HotKey,
-}
-
-impl AppConfig {
-    /// Load app configuration.
-    pub fn load(manager: &crate::ConfigManager) -> Result<Self> {
-        let inner = manager.load()?;
-        let hotkey = inner.hotkey();
-        Ok(Self { inner, hotkey })
     }
 }

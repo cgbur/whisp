@@ -6,7 +6,7 @@ use std::env;
 use std::fs;
 use std::time::Instant;
 
-use whisp_transcribe::{OpenAIClient, OpenAIConfig, TranscribeRequest, Transcriber};
+use whisp_transcribe::{OpenAIClient, OpenAIConfig, Transcriber};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -27,7 +27,11 @@ async fn main() -> anyhow::Result<()> {
     // Read audio file
     println!("Reading audio file: {}", audio_file);
     let audio = fs::read(audio_file)?;
-    println!("Audio size: {} bytes ({:.2} KB)", audio.len(), audio.len() as f64 / 1024.0);
+    println!(
+        "Audio size: {} bytes ({:.2} KB)",
+        audio.len(),
+        audio.len() as f64 / 1024.0
+    );
 
     // Configure client
     let mut config = OpenAIConfig::new(api_key);
@@ -42,19 +46,13 @@ async fn main() -> anyhow::Result<()> {
     println!("Sending transcription request...");
     let start = Instant::now();
 
-    let request = TranscribeRequest {
-        audio,
-        language: None,
-        prompt: None,
-    };
-
-    let response = client.transcribe(request).await?;
+    let text = client.transcribe(&audio, None).await?;
     let elapsed = start.elapsed();
 
     println!();
     println!("Transcription completed in {:.2}s", elapsed.as_secs_f64());
     println!("---");
-    println!("{}", response.text);
+    println!("{}", text);
     println!("---");
 
     Ok(())

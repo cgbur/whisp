@@ -13,14 +13,13 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use crate::event::WhispEvent;
-use crate::{
-    Config, MicState, OpenAIClient, OpenAIConfig, Recording, TranscribeRequest, Transcriber,
-};
+use crate::{Config, MicState, Recording, Transcriber};
 
 /// Processing pipeline for audio data.
 pub struct AudioPipeline {
     runtime: Runtime,
     config: Arc<RwLock<Config>>,
+    transcriber: Arc<dyn Transcriber>,
     transcription_handles: mpsc::UnboundedSender<TranscriptionTask>,
 }
 
@@ -38,6 +37,7 @@ impl AudioPipeline {
     /// Create a new pipeline instance.
     pub fn new(
         config: Arc<RwLock<Config>>,
+        transcriber: Arc<dyn Transcriber>,
         event_sender: EventLoopProxy<WhispEvent>,
     ) -> anyhow::Result<Self> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -47,9 +47,12 @@ impl AudioPipeline {
 
         let transcription_handles = start_results_collector(&runtime, event_sender)?;
 
+        info!(transcriber = transcriber.name(), "Audio pipeline initialized");
+
         Ok(Self {
             runtime,
             config,
+            transcriber,
             transcription_handles,
         })
     }
@@ -72,63 +75,43 @@ impl AudioPipeline {
             return Ok(SubmitResult::Discarded);
         }
 
+        let transcriber = self.transcriber.clone();
         let config = self.config.clone();
-        let handle = self.runtime.spawn(transcribe(config, recording));
+        let handle = self.runtime.spawn(transcribe(transcriber, config, recording));
 
         self.transcription_handles.send(handle)?;
         Ok(SubmitResult::Sent)
     }
 }
 
-async fn transcribe(config: Arc<RwLock<Config>>, recording: Recording) -> TranscriptionResult {
-    let audio = recording.into_data();
+async fn transcribe(
+    transcriber: Arc<dyn Transcriber>,
+    config: Arc<RwLock<Config>>,
+    recording: Recording,
+) -> TranscriptionResult {
+    let audio: Arc<[u8]> = recording.into_data().into();
     let bytes = audio.len();
 
     let config_read = config.read();
     let mut num_retries = config_read.retries;
-
-    // Build the transcription client
-    let api_key = match config_read.key_openai() {
-        Some(key) => key.to_string(),
-        None => {
-            return TranscriptionResult::RetryError {
-                retries: 0,
-                error: anyhow::anyhow!("No OpenAI API key configured"),
-                data: audio,
-            };
-        }
-    };
-
-    let mut client_config = OpenAIConfig::new(&api_key);
-    if let Some(model) = config_read.model() {
-        client_config = client_config.with_model(model);
-    }
-    let client = OpenAIClient::new(client_config);
-
     let language = config_read.language().map(|s| s.to_string());
     drop(config_read);
 
-    let request = TranscribeRequest {
-        audio: audio.clone(),
-        language,
-        prompt: None,
-    };
-
     let mut before = Instant::now();
-    let mut result = client.transcribe(request.clone()).await;
+    let mut result = transcriber.transcribe(&audio, language.as_deref()).await;
 
     while result.is_err() && num_retries > 0 {
         warn!("Retrying transcription, previous error: {:?}", result);
         before = Instant::now();
-        result = client.transcribe(request.clone()).await;
+        result = transcriber.transcribe(&audio, language.as_deref()).await;
         num_retries -= 1;
     }
 
-    let Ok(response) = result else {
+    let Ok(text) = result else {
         return TranscriptionResult::RetryError {
             retries: config.read().retries,
             error: anyhow::anyhow!("Transcription failed"),
-            data: audio,
+            data: audio.to_vec(),
         };
     };
 
@@ -140,7 +123,7 @@ async fn transcribe(config: Arc<RwLock<Config>>, recording: Recording) -> Transc
         "transcription completed"
     );
 
-    TranscriptionResult::Success(response.text)
+    TranscriptionResult::Success(text)
 }
 
 enum TranscriptionResult {

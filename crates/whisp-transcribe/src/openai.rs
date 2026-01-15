@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tracing::debug;
 
-use crate::{Result, TranscribeError, TranscribeRequest, TranscribeResponse, Transcriber};
+use crate::{Result, TranscribeError, Transcriber};
 
 const TRANSCRIPTION_ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
 const DEFAULT_MODEL: &str = "gpt-4o-mini-transcribe";
@@ -69,18 +69,18 @@ impl OpenAIClient {
 
 #[async_trait]
 impl Transcriber for OpenAIClient {
-    async fn transcribe(&self, request: TranscribeRequest) -> Result<TranscribeResponse> {
+    async fn transcribe(&self, audio: &[u8], language: Option<&str>) -> Result<String> {
         debug!(
             model = self.config.model(),
-            audio_bytes = request.audio.len(),
-            language = ?request.language,
+            audio_bytes = audio.len(),
+            language = ?language,
             "Sending transcription request to OpenAI"
         );
 
         let mut form = reqwest::multipart::Form::new()
             .part(
                 "file",
-                reqwest::multipart::Part::bytes(request.audio)
+                reqwest::multipart::Part::bytes(audio.to_vec())
                     .file_name("recording.wav")
                     .mime_str("audio/wav")
                     .map_err(|e| TranscribeError::ApiError(e.to_string()))?,
@@ -90,12 +90,8 @@ impl Transcriber for OpenAIClient {
                 reqwest::multipart::Part::text(self.config.model().to_string()),
             );
 
-        if let Some(language) = request.language {
-            form = form.part("language", reqwest::multipart::Part::text(language));
-        }
-
-        if let Some(prompt) = request.prompt {
-            form = form.part("prompt", reqwest::multipart::Part::text(prompt));
+        if let Some(lang) = language {
+            form = form.part("language", reqwest::multipart::Part::text(lang.to_string()));
         }
 
         let response = self
@@ -120,9 +116,7 @@ impl Transcriber for OpenAIClient {
             .await
             .map_err(|e| TranscribeError::TranscriptionFailed(e.to_string()))?;
 
-        Ok(TranscribeResponse {
-            text: whisper_response.text,
-        })
+        Ok(whisper_response.text)
     }
 
     fn name(&self) -> &str {

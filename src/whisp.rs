@@ -25,8 +25,8 @@ use whisp::icon::MicStateIcon;
 use whisp::notify::NotificationLayer;
 use whisp::process::{AudioPipeline, SubmitResult};
 use whisp::{
-    AudioEvent, Config, ConfigManager, MicState, Recorder, RecordingHandle, DEFAULT_LOG_LEVEL,
-    VERSION,
+    AudioEvent, ConfigManager, MicState, OpenAIClient, OpenAIConfig, Recorder, RecordingHandle,
+    Transcriber, DEFAULT_LOG_LEVEL, VERSION,
 };
 
 fn main() -> Result<()> {
@@ -108,8 +108,22 @@ fn main() -> Result<()> {
         }
     });
 
+    // Create transcriber based on config
+    let transcriber: Arc<dyn Transcriber> = {
+        let cfg = config.read();
+        let api_key = cfg
+            .key_openai()
+            .context("OpenAI API key not configured")?
+            .to_string();
+        let mut openai_config = OpenAIConfig::new(api_key);
+        if let Some(model) = cfg.model() {
+            openai_config = openai_config.with_model(model);
+        }
+        Arc::new(OpenAIClient::new(openai_config))
+    };
+
     // Set up processor for handling audio data async operations
-    let audio_pipeline = AudioPipeline::new(config.clone(), event_sender.clone())?;
+    let audio_pipeline = AudioPipeline::new(config.clone(), transcriber, event_sender.clone())?;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;

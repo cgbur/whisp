@@ -4,10 +4,7 @@ pub use whisp_core::{
     DEFAULT_LOG_LEVEL,
 };
 pub use whisp_audio::{Recorder, RecorderError, Recording, RecordingHandle};
-pub use whisp_transcribe::{
-    OpenAIClient, OpenAIConfig, TranscribeError, TranscribeRequest, TranscribeResponse,
-    Transcriber,
-};
+pub use whisp_transcribe::{OpenAIClient, OpenAIConfig, TranscribeError, Transcriber};
 
 // App-specific modules
 mod color;
