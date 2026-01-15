@@ -4,8 +4,9 @@
 
 use std::sync::Arc;
 
+use std::sync::RwLock;
+
 use global_hotkey::hotkey::{HotKey, Modifiers};
-use parking_lot::RwLock;
 
 use crate::Config;
 
@@ -33,6 +34,6 @@ impl ConfigExt for Config {
 
 impl ConfigExt for Arc<RwLock<Config>> {
     fn hotkey(&self) -> HotKey {
-        self.read().hotkey()
+        self.read().unwrap().hotkey()
     }
 }

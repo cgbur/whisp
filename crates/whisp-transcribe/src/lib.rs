@@ -11,6 +11,7 @@ mod local;
 mod model;
 
 use async_trait::async_trait;
+pub use bytes::Bytes;
 #[cfg(feature = "local-whisper")]
 pub use local::{LocalWhisperClient, LocalWhisperConfig};
 #[cfg(feature = "local-whisper")]
@@ -49,9 +50,11 @@ pub trait Transcriber: Send + Sync {
     /// Transcribe audio to text.
     ///
     /// # Arguments
-    /// * `audio` - Raw audio data (WAV, MP3, etc.)
+    /// * `audio` - Raw audio data (WAV, MP3, etc.) as reference-counted bytes.
+    ///             Use `Bytes::from(vec)` to convert from Vec<u8> (zero-copy).
+    ///             Cloning Bytes is O(1) which allows efficient retries.
     /// * `language` - Optional language hint (ISO 639-1 code, e.g., "en")
-    async fn transcribe(&self, audio: &[u8], language: Option<&str>) -> Result<String>;
+    async fn transcribe(&self, audio: Bytes, language: Option<&str>) -> Result<String>;
 
     /// Returns the name of this transcriber for logging/debugging.
     fn name(&self) -> &str;

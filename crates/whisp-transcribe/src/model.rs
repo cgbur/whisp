@@ -507,6 +507,6 @@ mod tests {
 
     #[test]
     fn test_default_model() {
-        assert_eq!(WhisperModel::default(), WhisperModel::BaseQ8_0);
+        assert_eq!(WhisperModel::default(), WhisperModel::BaseEnQ8_0);
     }
 }

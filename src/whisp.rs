@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use arboard::Clipboard;
 use enigo::Enigo;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-use parking_lot::RwLock;
+use std::sync::RwLock;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 use tracing::{error, info, warn};
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
     let config_manager = ConfigManager::new()?;
     let config = Arc::new(RwLock::new(config_manager.load()?));
     // Save back the config to create the file if it doesn't exist
-    config_manager.save(&config.read())?;
+    config_manager.save(&config.read().unwrap())?;
 
     // Set up hotkey
     let hotkey_manager = GlobalHotKeyManager::new().context("Failed to create hotkey manager")?;
@@ -114,7 +114,7 @@ fn main() -> Result<()> {
 
     // Create transcriber based on config
     let transcriber: Arc<dyn Transcriber> = {
-        let cfg = config.read();
+        let cfg = config.read().unwrap();
         match cfg.backend() {
             TranscriptionBackend::OpenAI => {
                 let api_key = cfg
@@ -239,7 +239,7 @@ fn main() -> Result<()> {
                         .send_event(WhispEvent::StateChanged(MicState::Idle))
                         .ok();
 
-                    let config = config.read();
+                    let config = config.read().unwrap();
                     info!(
                         auto_paste = config.auto_paste,
                         restore_clipboard = config.restore_clipboard,

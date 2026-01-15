@@ -17,7 +17,7 @@ use std::time::Duration;
 use cpal::Host;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavSpec, WavWriter};
-use parking_lot::Mutex;
+use std::sync::Mutex;
 use thiserror::Error;
 use tracing::{error, info};
 use whisp_core::{AudioEvent, MicState, RecordingState};
@@ -61,24 +61,24 @@ impl MemoryWriter {
                 "Failed to unwrap inner Arc in MemoryWriter"
             ))
         })?;
-        let cursor = owned.into_inner();
+        let cursor = owned.into_inner().unwrap();
         Ok(cursor.into_inner())
     }
 }
 
 impl Seek for MemoryWriter {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        self.inner.lock().seek(pos)
+        self.inner.lock().unwrap().seek(pos)
     }
 }
 
 impl Write for MemoryWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.lock().write(buf)
+        self.inner.lock().unwrap().write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.inner.lock().flush()
+        self.inner.lock().unwrap().flush()
     }
 }
 
@@ -225,7 +225,7 @@ impl RecordingHandle {
 
         self.stream.pause().ok();
 
-        self.writer.lock().take().unwrap().finalize().map_err(|e| {
+        self.writer.lock().unwrap().take().unwrap().finalize().map_err(|e| {
             RecorderError::Anyhow(anyhow::anyhow!("Failed to finalize writer: {}", e))
         })?;
 
@@ -282,7 +282,7 @@ fn write_data(
         }
     }
 
-    if let Some(mut guard) = writer.try_lock() {
+    if let Ok(mut guard) = writer.try_lock() {
         if let Some(writer) = guard.as_mut() {
             for &sample in data.iter() {
                 writer.write_sample(sample).ok();

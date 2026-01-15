@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use tracing::{debug, info};
 use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
@@ -183,6 +184,10 @@ impl LocalWhisperClient {
 }
 
 /// Simple linear interpolation resampling.
+///
+/// TODO: Linear interpolation introduces aliasing artifacts when downsampling.
+/// Consider using a proper resampling library like `rubato` for sinc interpolation,
+/// or at minimum apply a low-pass filter before downsampling.
 fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
     if from_rate == to_rate {
         return samples.to_vec();
@@ -215,9 +220,9 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
 
 #[async_trait]
 impl Transcriber for LocalWhisperClient {
-    async fn transcribe(&self, audio: &[u8], language: Option<&str>) -> Result<String> {
+    async fn transcribe(&self, audio: Bytes, language: Option<&str>) -> Result<String> {
         // Convert audio to the format whisper expects
-        let samples = self.convert_audio(audio)?;
+        let samples = self.convert_audio(&audio)?;
 
         // Get the instance (ensures model is loaded)
         let mut guard = self.ensure_instance()?;

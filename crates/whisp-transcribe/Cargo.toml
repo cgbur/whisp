@@ -13,6 +13,7 @@ local-whisper = ["dep:whisper-rs", "dep:hound", "dep:sha1"]
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+bytes = "1"
 futures-util.workspace = true
 reqwest.workspace = true
 serde.workspace = true

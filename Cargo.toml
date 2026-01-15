@@ -16,7 +16,6 @@ whisp-transcribe = { path = "crates/whisp-transcribe" }
 # Core dependencies
 anyhow = "1.0"
 async-trait = "0.1"
-parking_lot = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2"
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros"] }
@@ -76,7 +75,6 @@ whisp-audio.workspace = true
 whisp-transcribe.workspace = true
 
 anyhow.workspace = true
-parking_lot.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true

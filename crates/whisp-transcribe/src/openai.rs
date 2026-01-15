@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tracing::debug;
 
-use crate::{Result, TranscribeError, Transcriber};
+use crate::{Bytes, Result, TranscribeError, Transcriber};
 
 const TRANSCRIPTION_ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
 const DEFAULT_MODEL: &str = "gpt-4o-mini-transcribe";
@@ -69,7 +69,7 @@ impl OpenAIClient {
 
 #[async_trait]
 impl Transcriber for OpenAIClient {
-    async fn transcribe(&self, audio: &[u8], language: Option<&str>) -> Result<String> {
+    async fn transcribe(&self, audio: Bytes, language: Option<&str>) -> Result<String> {
         debug!(
             model = self.config.model(),
             audio_bytes = audio.len(),
@@ -80,7 +80,7 @@ impl Transcriber for OpenAIClient {
         let mut form = reqwest::multipart::Form::new()
             .part(
                 "file",
-                reqwest::multipart::Part::bytes(audio.to_vec())
+                reqwest::multipart::Part::stream(reqwest::Body::from(audio))
                     .file_name("recording.wav")
                     .mime_str("audio/wav")
                     .map_err(|e| TranscribeError::ApiError(e.to_string()))?,

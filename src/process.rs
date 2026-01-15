@@ -6,7 +6,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use parking_lot::RwLock;
+use std::sync::RwLock;
+use whisp_transcribe::Bytes;
 use tao::event_loop::EventLoopProxy;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
@@ -70,9 +71,9 @@ impl AudioPipeline {
             "audio submitted"
         );
 
-        if recording.duration() < self.config.read().discard_duration() {
+        if recording.duration() < self.config.read().unwrap().discard_duration() {
             info!(
-                discard_duration = ?self.config.read().discard_duration(),
+                discard_duration = ?self.config.read().unwrap().discard_duration(),
                 "discarding recording"
             );
             return Ok(SubmitResult::Discarded);
@@ -94,11 +95,12 @@ async fn transcribe(
     config: Arc<RwLock<Config>>,
     recording: Recording,
 ) -> TranscriptionResult {
-    let audio: Arc<[u8]> = recording.into_data().into();
-    let bytes = audio.len();
+    // Bytes is reference-counted, so cloning is O(1)
+    let audio: Bytes = recording.into_data().into();
+    let num_bytes = audio.len();
 
     let (mut num_retries, language) = {
-        let config_read = config.read();
+        let config_read = config.read().unwrap();
         (
             config_read.retries,
             config_read.language().map(|s| s.to_string()),
@@ -106,25 +108,25 @@ async fn transcribe(
     };
 
     let mut before = Instant::now();
-    let mut result = transcriber.transcribe(&audio, language.as_deref()).await;
+    let mut result = transcriber.transcribe(audio.clone(), language.as_deref()).await;
 
     while result.is_err() && num_retries > 0 {
         warn!("Retrying transcription, previous error: {:?}", result);
         before = Instant::now();
-        result = transcriber.transcribe(&audio, language.as_deref()).await;
+        result = transcriber.transcribe(audio.clone(), language.as_deref()).await;
         num_retries -= 1;
     }
 
     let Ok(text) = result else {
         return TranscriptionResult::RetryError {
-            retries: config.read().retries,
+            retries: config.read().unwrap().retries,
             error: anyhow::anyhow!("Transcription failed"),
             data: audio.to_vec(),
         };
     };
 
     let duration = before.elapsed();
-    let mb_per_second = bytes as f64 / (1024.0 * 1024.0) / duration.as_secs_f64();
+    let mb_per_second = num_bytes as f64 / (1024.0 * 1024.0) / duration.as_secs_f64();
     info!(
         duration = ?duration,
         mb_per_second = mb_per_second,

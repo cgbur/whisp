@@ -12,6 +12,5 @@ whisp-core.workspace = true
 anyhow.workspace = true
 cpal.workspace = true
 hound.workspace = true
-parking_lot.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
