@@ -14,7 +14,6 @@ local-whisper = ["dep:whisper-rs", "dep:hound"]
 anyhow.workspace = true
 async-trait.workspace = true
 futures-util.workspace = true
-parking_lot.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 thiserror.workspace = true
