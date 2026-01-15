@@ -4,9 +4,9 @@
 //! via whisper-rs bindings.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use async_trait::async_trait;
-use parking_lot::Mutex;
 use tracing::{debug, info};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -64,8 +64,10 @@ impl LocalWhisperClient {
     }
 
     /// Get or initialize the whisper context, returning a guard.
-    fn ensure_context(&self) -> Result<parking_lot::MutexGuard<'_, Option<WhisperContext>>> {
-        let mut guard = self.context.lock();
+    fn ensure_context(&self) -> Result<std::sync::MutexGuard<'_, Option<WhisperContext>>> {
+        let mut guard = self.context.lock().map_err(|e| {
+            TranscribeError::TranscriptionFailed(format!("Failed to lock context: {}", e))
+        })?;
         if guard.is_none() {
             let path = match &self.config.model_path {
                 Some(p) => p.clone(),
@@ -201,12 +203,18 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
 #[async_trait]
 impl Transcriber for LocalWhisperClient {
     async fn transcribe(&self, audio: &[u8], language: Option<&str>) -> Result<String> {
-        // Convert audio to the format whisper expects
+        // Convert audio to the format whisper expects (this is CPU work, do it outside spawn_blocking)
         let samples = self.convert_audio(audio)?;
+        let language = language.map(|s| s.to_string());
 
-        // Get the whisper context
-        let ctx_guard = self.ensure_context()?;
-        let ctx = ctx_guard.as_ref().expect("context should be initialized");
+        // Ensure model is loaded
+        self.ensure_context()?;
+
+        // Get the context
+        let context = self.context.lock().map_err(|e| {
+            TranscribeError::TranscriptionFailed(format!("Failed to lock context: {}", e))
+        })?;
+        let ctx = context.as_ref().expect("context should be initialized");
 
         // Create a new state for this transcription
         let mut state = ctx.create_state().map_err(|e| {
@@ -217,7 +225,7 @@ impl Transcriber for LocalWhisperClient {
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
 
         // Set language if provided
-        if let Some(lang) = language {
+        if let Some(ref lang) = language {
             params.set_language(Some(lang));
         } else {
             // Auto-detect language
