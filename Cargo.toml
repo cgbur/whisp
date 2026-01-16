@@ -31,6 +31,7 @@ dirs = "5.0"
 toml = "0.8"
 
 # HTTP
+bytes = "1"
 reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
 futures-util = "0.3"
 
@@ -50,6 +51,7 @@ core-foundation = "0.10"
 tempfile = "3.13"
 
 # Local whisper (optional)
+sha1 = "0.10"
 whisper-rs = "0.15.1"
 
 [package]

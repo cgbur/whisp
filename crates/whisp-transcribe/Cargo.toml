@@ -13,7 +13,7 @@ local-whisper = ["dep:whisper-rs", "dep:hound", "dep:sha1"]
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-bytes = "1"
+bytes.workspace = true
 futures-util.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -24,7 +24,7 @@ whisp-core.workspace = true
 
 # Optional dependencies for local whisper
 hound = { workspace = true, optional = true }
-sha1 = { version = "0.10", optional = true }
+sha1 = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 whisper-rs = { workspace = true, optional = true, features = ["tracing_backend", "metal"] }
