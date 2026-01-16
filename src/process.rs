@@ -3,15 +3,14 @@
 //! This module handles the async processing of recorded audio,
 //! including transcription and result delivery.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
-use std::sync::RwLock;
-use whisp_transcribe::Bytes;
 use tao::event_loop::EventLoopProxy;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
+use whisp_transcribe::Bytes;
 
 use crate::event::WhispEvent;
 use crate::{Config, MicState, Recording, Transcriber};
@@ -108,12 +107,16 @@ async fn transcribe(
     };
 
     let mut before = Instant::now();
-    let mut result = transcriber.transcribe(audio.clone(), language.as_deref()).await;
+    let mut result = transcriber
+        .transcribe(audio.clone(), language.as_deref())
+        .await;
 
     while result.is_err() && num_retries > 0 {
         warn!("Retrying transcription, previous error: {:?}", result);
         before = Instant::now();
-        result = transcriber.transcribe(audio.clone(), language.as_deref()).await;
+        result = transcriber
+            .transcribe(audio.clone(), language.as_deref())
+            .await;
         num_retries -= 1;
     }
 

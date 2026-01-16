@@ -1,6 +1,6 @@
 //! Whisp - Unobtrusive global speech-to-text.
 
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
 use std::thread::sleep;
 
@@ -8,7 +8,6 @@ use anyhow::{Context, Result};
 use arboard::Clipboard;
 use enigo::Enigo;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-use std::sync::RwLock;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 use tracing::{error, info, warn};

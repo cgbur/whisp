@@ -301,8 +301,9 @@ mod tests {
     #[test]
     #[ignore]
     fn test_transcribe_wav() {
-        use crate::model::ensure_model;
         use std::io::Cursor;
+
+        use crate::model::ensure_model;
 
         // Look for test.wav in project root
         let project_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -319,7 +320,11 @@ mod tests {
         }
 
         let audio_data = std::fs::read(&test_file).expect("Failed to read test.wav");
-        eprintln!("Read {} bytes from {}", audio_data.len(), test_file.display());
+        eprintln!(
+            "Read {} bytes from {}",
+            audio_data.len(),
+            test_file.display()
+        );
 
         // Read and convert audio, then write processed version
         let processed_file = project_root.join("test-processed.wav");
@@ -389,7 +394,9 @@ mod tests {
             let mut writer =
                 hound::WavWriter::create(&processed_file, out_spec).expect("Failed to create WAV");
             for sample in &resampled {
-                writer.write_sample(*sample).expect("Failed to write sample");
+                writer
+                    .write_sample(*sample)
+                    .expect("Failed to write sample");
             }
             writer.finalize().expect("Failed to finalize WAV");
             eprintln!("Wrote processed audio to {}", processed_file.display());
@@ -416,9 +423,7 @@ mod tests {
         let config = LocalWhisperConfig::new(model);
         let client = LocalWhisperClient::new(config);
 
-        let result = rt.block_on(async {
-            client.transcribe(audio_data.into(), None).await
-        });
+        let result = rt.block_on(async { client.transcribe(audio_data.into(), None).await });
 
         match result {
             Ok(text) => {

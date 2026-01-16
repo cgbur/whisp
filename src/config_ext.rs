@@ -2,9 +2,7 @@
 //!
 //! This module provides hotkey support on top of the core Config.
 
-use std::sync::Arc;
-
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use global_hotkey::hotkey::{HotKey, Modifiers};
 
