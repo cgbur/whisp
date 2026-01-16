@@ -1,52 +1,47 @@
-//! Module for managing audio recording. There can only be one active recording
-//! at a time and storage/processes are not managed by this module.
+//! Audio recording module for whisp.
+//!
+//! This crate provides audio recording functionality using the system's
+//! default input device. It's platform-agnostic and uses channels for
+//! event communication instead of depending on any specific UI framework.
 //!
 //! ## Format notes
 //!
-//! Wav ~ 467KiB every 5 seconds, meaning we hit our limit of 25MiB in 4m30s.
-//! This is plenty of time but a lot of data regardless. Need to consider lossy
-//! formats. Whisper supports: m4a, mp3, webm, mp4, mpga, wav, and mpeg.
+//! WAV format uses ~467KiB every 5 seconds, hitting the 25MiB API limit
+//! in about 4m30s. This is sufficient for most dictation use cases.
 
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
-use std::sync::Arc;
+use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use anyhow::anyhow;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Host;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavSpec, WavWriter};
-use parking_lot::Mutex;
-use tao::event_loop::EventLoopProxy;
 use thiserror::Error;
 use tracing::{error, info};
+use whisp_core::{AudioEvent, MicState, RecordingState};
 
-//
-use crate::event::WhispEvent;
-use crate::icon::MicState::Active;
-
+/// Errors that can occur during recording.
 #[derive(Debug, Error)]
 pub enum RecorderError {
-    /// generic anyhow error
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
-    /// No recording device available
+
     #[error("no input device available")]
     NoInputDevice,
-    /// Sample format not supported
+
     #[error("sample format not supported: {0}")]
     SampleFormatNotSupported(String),
-    /// Build stream error
+
     #[error(transparent)]
     BuildStream(#[from] cpal::BuildStreamError),
 }
 
-type Result<T> = std::result::Result<T, RecorderError>;
+pub type Result<T> = std::result::Result<T, RecorderError>;
+
 type WavWriterHandle = Arc<Mutex<Option<WavWriter<MemoryWriter>>>>;
 
-/// A cheaply cloneable handle to the inner data that is being recorded. The
-/// finalize method for the wav writer does not return the inner data, so we
-/// store it behind an Arc<Mutex> to allow for cheap cloning and access to the
-/// inner data.
+/// A cheaply cloneable handle to the recording buffer.
 #[derive(Clone)]
 struct MemoryWriter {
     inner: Arc<Mutex<Cursor<Vec<u8>>>>,
@@ -60,33 +55,33 @@ impl MemoryWriter {
     }
 
     fn try_into_inner(self) -> Result<Vec<u8>> {
-        // Attempt to own the inner arc
         let owned = Arc::try_unwrap(self.inner).map_err(|_| {
-            RecorderError::Anyhow(anyhow!("Failed to unwrap inner Arc in MemoryWriter"))
+            RecorderError::Anyhow(anyhow::anyhow!(
+                "Failed to unwrap inner Arc in MemoryWriter"
+            ))
         })?;
-        // Extract the cursor
-        let cursor = owned.into_inner();
-        // Extract the Vec
+        let cursor = owned.into_inner().unwrap();
         Ok(cursor.into_inner())
     }
 }
 
 impl Seek for MemoryWriter {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        self.inner.lock().seek(pos)
+        self.inner.lock().unwrap().seek(pos)
     }
 }
 
 impl Write for MemoryWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.lock().write(buf)
+        self.inner.lock().unwrap().write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.inner.lock().flush()
+        self.inner.lock().unwrap().flush()
     }
 }
 
+/// Audio recorder using the system's default input device.
 pub struct Recorder {
     host: Host,
 }
@@ -97,20 +92,21 @@ impl Default for Recorder {
     }
 }
 
-pub struct RecordingState {
-    mic_active: bool,
-}
-
 impl Recorder {
+    /// Create a new recorder.
     pub fn new() -> Self {
         Self {
             host: cpal::default_host(),
         }
     }
 
+    /// Start recording audio.
+    ///
+    /// The `event_sender` is used to notify when the mic becomes active
+    /// (receives non-silent audio). Pass `None` if you don't need events.
     pub fn start_recording(
         &self,
-        event_sender: EventLoopProxy<WhispEvent>,
+        event_sender: Option<Sender<AudioEvent>>,
     ) -> Result<RecordingHandle> {
         let device = self
             .host
@@ -120,7 +116,11 @@ impl Recorder {
             .default_input_config()
             .map_err(|_| RecorderError::NoInputDevice)?;
 
-        info!(device_name=%device.name().unwrap(), config=?config, "Recording from device");
+        info!(
+            device_name = %device.name().unwrap_or_default(),
+            config = ?config,
+            "Recording from device"
+        );
 
         let spec = wav_spec_from_config(&config);
 
@@ -129,20 +129,17 @@ impl Recorder {
             WavWriter::new(buffer.clone(), spec).map_err(|e| RecorderError::Anyhow(e.into()))?;
         let writer = Arc::new(Mutex::new(Some(writer)));
 
-        // Run the input stream on a separate thread.
         let writer_2 = writer.clone();
 
         let err_fn = move |err| {
             error!("an error occurred on stream: {}", err);
         };
 
-        // Create a recording state for UI and filtering.
-        let mut state = RecordingState { mic_active: false };
+        let mut state = RecordingState::default();
 
         let stream = match config.sample_format() {
             cpal::SampleFormat::F32 => device.build_input_stream(
                 &config.into(),
-                // move |data, _: &_| write_input_data::<f32, f32>(data, &writer_2),
                 move |data, _: &_| write_data(&mut state, data, &writer_2, &event_sender),
                 err_fn,
                 None,
@@ -151,13 +148,13 @@ impl Recorder {
                 return Err(RecorderError::SampleFormatNotSupported(format!(
                     "{:?}",
                     sample_format
-                )))
+                )));
             }
         };
 
         stream
             .play()
-            .map_err(|_| anyhow!("failed to play stream"))?;
+            .map_err(|_| anyhow::anyhow!("failed to play stream"))?;
 
         Ok(RecordingHandle {
             stream,
@@ -168,65 +165,75 @@ impl Recorder {
     }
 }
 
-/// Handle to the active recording. When dropped or finalized, the recording
-/// will end. You must call `finalize` to receive the data.
+/// Handle to an active recording.
+///
+/// Call `finish()` to stop recording and retrieve the audio data.
+/// If dropped without calling `finish()`, the recording will be finalized
+/// but you won't be able to retrieve the data.
 pub struct RecordingHandle {
     stream: cpal::Stream,
     writer: WavWriterHandle,
-    // The buffer the data is being written to. Presence of this buffer
-    // indicates if the recording has been finalized or not.
     buffer: Option<MemoryWriter>,
     spec: WavSpec,
 }
 
+/// A completed recording with audio data.
 pub struct Recording {
     data: Vec<u8>,
     spec: WavSpec,
 }
 
 impl Recording {
+    /// Get the raw audio data (WAV format).
     pub fn data(&self) -> &[u8] {
         &self.data
     }
 
+    /// Get the WAV specification.
     pub fn spec(&self) -> &WavSpec {
         &self.spec
     }
 
+    /// Get the number of samples in the recording.
     pub fn samples(&self) -> u64 {
         self.data.len() as u64 / (self.spec.bits_per_sample / 8) as u64
     }
 
+    /// Get the duration of the recording.
     pub fn duration(&self) -> Duration {
         let num_samples = self.samples();
         let duration = num_samples as f64 / self.spec.sample_rate as f64;
         Duration::from_secs_f64(duration)
     }
 
+    /// Consume the recording and return the raw data.
     pub fn into_data(self) -> Vec<u8> {
         self.data
     }
 }
 
 impl RecordingHandle {
+    /// Finish the recording and return the audio data.
     pub fn finish(&mut self) -> Result<Option<Recording>> {
         if self.buffer.is_none() {
             return Ok(None);
         }
+
         info!("ending recording");
         let buffer = self.buffer.take().unwrap();
-        // can not drop because we have that &mut self instead of self.
-        // drop(self.stream);
-        // instead: pause and ignore errors.
+
         self.stream.pause().ok();
-        // Finalize the writer so it writes the proper framing information.
+
         self.writer
             .lock()
+            .unwrap()
             .take()
             .unwrap()
             .finalize()
-            .map_err(|e| RecorderError::Anyhow(anyhow!("Failed to finalize writer: {}", e)))?;
-        // Now that its ended, we can grab out the actual data and return it.
+            .map_err(|e| {
+                RecorderError::Anyhow(anyhow::anyhow!("Failed to finalize writer: {}", e))
+            })?;
+
         let data = buffer.try_into_inner()?;
 
         Ok(Some(Recording {
@@ -267,22 +274,20 @@ fn write_data(
     state: &mut RecordingState,
     data: &[f32],
     writer: &WavWriterHandle,
-    event_sender: &EventLoopProxy<WhispEvent>,
+    event_sender: &Option<Sender<AudioEvent>>,
 ) {
     if !state.mic_active {
         if data.iter().any(|&sample| sample != 0.0) {
-            // set active and record this batch
             state.mic_active = true;
-            event_sender
-                .send_event(WhispEvent::StateChanged(Active))
-                .ok();
+            if let Some(sender) = event_sender {
+                sender.send(AudioEvent::StateChanged(MicState::Active)).ok();
+            }
         } else {
-            // ignore this batch
             return;
         }
     }
 
-    if let Some(mut guard) = writer.try_lock() {
+    if let Ok(mut guard) = writer.try_lock() {
         if let Some(writer) = guard.as_mut() {
             for &sample in data.iter() {
                 writer.write_sample(sample).ok();
@@ -290,17 +295,3 @@ fn write_data(
         }
     }
 }
-
-/* save for later when we may provide basic filtering based on volume.
-
-pub const MIN_DB: f32 = -96.0;
-
-/// Convert a slice of f32 samples to dBFS.
-pub fn db_fs(data: &[f32]) -> f32 {
-    let max_sample = data
-        .iter()
-        .fold(f32::EQUILIBRIUM, |max, &sample| sample.abs().max(max));
-
-    (20.0 * max_sample.log10()).clamp(MIN_DB, 0.0)
-}
-*/

@@ -1,0 +1,16 @@
+[package]
+name = "whisp-audio"
+version = "0.1.0"
+edition.workspace = true
+description = "Audio recording for whisp"
+license.workspace = true
+publish = false
+
+[dependencies]
+whisp-core.workspace = true
+
+anyhow.workspace = true
+cpal.workspace = true
+hound.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

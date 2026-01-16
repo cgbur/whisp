@@ -1,26 +1,32 @@
-use std::sync::Arc;
+//! Whisp - Unobtrusive global speech-to-text.
+
+use std::sync::{Arc, RwLock, mpsc};
+use std::thread;
 use std::thread::sleep;
 
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 use enigo::Enigo;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-use parking_lot::RwLock;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 use tracing::{error, info, warn};
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 use tray_icon::menu::{AboutMetadataBuilder, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
-use whisp::config::ConfigManager;
+use whisp::config_ext::ConfigExt;
 use whisp::event::WhispEvent;
-use whisp::icon::MicState;
+use whisp::icon::MicStateIcon;
 use whisp::notify::NotificationLayer;
-use whisp::process::AudioPipeline;
-use whisp::record::{Recorder, RecordingHandle};
-use whisp::{DEFAULT_LOG_LEVEL, VERSION};
+use whisp::process::{AudioPipeline, SubmitResult};
+use whisp::{
+    AudioEvent, ConfigManager, DEFAULT_LOG_LEVEL, MicState, OpenAIClient, OpenAIConfig, Recorder,
+    RecordingHandle, Transcriber, TranscriptionBackend, VERSION,
+};
+#[cfg(feature = "local-whisper")]
+use whisp::{LocalWhisperClient, LocalWhisperConfig, WhisperModel, ensure_model};
 
 fn main() -> Result<()> {
     // Initialize the logger
@@ -36,13 +42,14 @@ fn main() -> Result<()> {
     // Load config
     let config_manager = ConfigManager::new()?;
     let config = Arc::new(RwLock::new(config_manager.load()?));
-    // save back the config to create the file if it doesn't exist
-    config_manager.save(&config.read())?;
+    // Save back the config to create the file if it doesn't exist
+    config_manager.save(&config.read().unwrap())?;
 
     // Set up hotkey
     let hotkey_manager = GlobalHotKeyManager::new().context("Failed to create hotkey manager")?;
+    let hotkey = config.hotkey();
     hotkey_manager
-        .register(config.read().hotkey())
+        .register(hotkey)
         .context("Failed to register hotkey")?;
 
     // Set up recorder
@@ -58,7 +65,6 @@ fn main() -> Result<()> {
     let icon_quit = MenuItem::new("Quit", true, None);
     let icon_copy_config = MenuItem::new("Copy config path", true, None);
     tray_menu.append_items(&[
-        // the name of the app
         &MenuItem::new("Whisp", false, None),
         &PredefinedMenuItem::separator(),
         &PredefinedMenuItem::about(
@@ -84,16 +90,104 @@ fn main() -> Result<()> {
     let event_loop: EventLoop<WhispEvent> = EventLoopBuilder::with_user_event().build();
     let event_sender = event_loop.create_proxy();
 
+    // Set up channel for audio events from recorder
+    let (audio_event_tx, audio_event_rx) = mpsc::channel::<AudioEvent>();
+
+    // Bridge audio events to the tao event loop
+    let event_sender_clone = event_sender.clone();
+    thread::spawn(move || {
+        while let Ok(audio_event) = audio_event_rx.recv() {
+            match audio_event {
+                AudioEvent::StateChanged(state) => {
+                    event_sender_clone
+                        .send_event(WhispEvent::StateChanged(state))
+                        .ok();
+                }
+            }
+        }
+    });
+
+    // Track hotkey state for paste timing (avoid paste while hotkey held)
+    let mut hotkey_held = false;
+    let mut pending_paste: Option<(String, Option<String>)> = None;
+
+    // Create transcriber based on config
+    let transcriber: Arc<dyn Transcriber> = {
+        let cfg = config.read().unwrap();
+        match cfg.backend() {
+            TranscriptionBackend::OpenAI => {
+                let api_key = cfg
+                    .key_openai()
+                    .context("OpenAI API key not configured")?
+                    .to_string();
+                let mut openai_config = OpenAIConfig::new(api_key);
+                if let Some(model) = cfg.model() {
+                    openai_config = openai_config.with_model(model);
+                }
+                Arc::new(OpenAIClient::new(openai_config))
+            }
+            #[cfg(feature = "local-whisper")]
+            TranscriptionBackend::Local => {
+                // Parse model name from config, or use default
+                let model = match cfg.local_model() {
+                    Some(name) => WhisperModel::from_name(name).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Unknown model '{}'. Available models:\n  {}\n\
+                             See https://huggingface.co/ggerganov/whisper.cpp for details.",
+                            name,
+                            WhisperModel::all_names().join("\n  ")
+                        )
+                    })?,
+                    None => WhisperModel::default(),
+                };
+
+                info!(model = ?model, "Using local Whisper backend");
+
+                // Ensure model is downloaded before continuing
+                let rt = tokio::runtime::Runtime::new()
+                    .context("Failed to create tokio runtime for model download")?;
+
+                rt.block_on(async {
+                    use std::sync::atomic::{AtomicU32, Ordering};
+                    let last_milestone = AtomicU32::new(u32::MAX); // u32::MAX = not set
+                    ensure_model(model, move |downloaded, total| {
+                        let percent = (downloaded as f64 / total as f64 * 100.0) as u32;
+                        let milestone = percent / 25 * 25; // Round down to nearest 25
+                        let prev = last_milestone.swap(milestone, Ordering::Relaxed);
+                        if prev != milestone {
+                            info!(
+                                downloaded_mb = downloaded / 1_000_000,
+                                total_mb = total / 1_000_000,
+                                percent = milestone,
+                                "Downloading model"
+                            );
+                        }
+                    })
+                    .await
+                })
+                .context("Failed to download Whisper model")?;
+
+                let local_config = LocalWhisperConfig::new(model);
+                Arc::new(LocalWhisperClient::new(local_config))
+            }
+            #[cfg(not(feature = "local-whisper"))]
+            TranscriptionBackend::Local => {
+                anyhow::bail!(
+                    "Local whisper backend requested but not compiled in. \
+                     Rebuild with --features local-whisper"
+                );
+            }
+        }
+    };
+
     // Set up processor for handling audio data async operations
-    let audio_pipeline = AudioPipeline::new(config.clone(), event_sender.clone())?;
+    let audio_pipeline = AudioPipeline::new(config.clone(), transcriber, event_sender.clone())?;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
         if let Event::NewEvents(StartCause::Init) = event {
-            // We create the icon once the event loop is actually running
-            // to prevent issues like https://github.com/tauri-apps/tray-icon/issues/90
-
+            // Create the icon once the event loop is running
             icon_tray.replace(
                 TrayIconBuilder::new()
                     .with_menu(Box::new(tray_menu.clone()))
@@ -103,12 +197,10 @@ fn main() -> Result<()> {
                     .unwrap(),
             );
 
-            // We have to request a redraw here to have the icon actually show up.
-            // Tao only exposes a redraw method on the Window so we use core-foundation directly.
+            // Request a redraw on macOS to show the icon
             #[cfg(target_os = "macos")]
             unsafe {
                 use core_foundation::runloop::{CFRunLoopGetMain, CFRunLoopWakeUp};
-
                 let rl = CFRunLoopGetMain();
                 CFRunLoopWakeUp(rl);
             }
@@ -142,19 +234,17 @@ fn main() -> Result<()> {
                     icon_tray.as_ref().map(|i| i.set_icon(Some(state.icon())));
                 }
                 WhispEvent::TranscriptReady(text) => {
-                    // Set the state to idle so it goes back to being inactive
-                    // after this transcription
                     event_sender
                         .send_event(WhispEvent::StateChanged(MicState::Idle))
                         .ok();
 
-                    let config = config.read();
+                    let config = config.read().unwrap();
                     info!(
-                        auto_paste = config.auto_paste(),
-                        restore_clipboard = config.restore_clipboard(),
+                        auto_paste = config.auto_paste,
+                        restore_clipboard = config.restore_clipboard,
                         "Handling transcription"
                     );
-                    let restore = config.auto_paste() && config.restore_clipboard();
+                    let restore = config.auto_paste && config.restore_clipboard;
                     let previous = if restore {
                         match clipboard.get_text() {
                             Ok(text) => Some(text),
@@ -167,66 +257,88 @@ fn main() -> Result<()> {
                         None
                     };
 
-                    // Copy the transcription to the clipboard
                     if let Err(e) = clipboard.set_text(&text) {
                         warn!("Failed to set clipboard text: {}", e);
                     }
 
-                    if config.auto_paste() {
-                        // Paste the transcription
-                        if let Err(e) = paste(&mut enigo) {
-                            warn!("Failed to paste transcription: {}", e);
-                        }
-                        if let Some(previous) = previous {
-                            // Restore the previous clipboard contents
-                            if let Err(e) = clipboard.set_text(&previous) {
-                                warn!("Failed to restore clipboard text: {}", e);
+                    if config.auto_paste {
+                        if hotkey_held {
+                            // Queue paste for when hotkey is released
+                            pending_paste = Some((text.clone(), previous));
+                        } else {
+                            // Paste immediately
+                            if let Err(e) = paste(&mut enigo) {
+                                warn!("Failed to paste transcription: {}", e);
+                            }
+                            if let Some(prev) = previous {
+                                if let Err(e) = clipboard.set_text(&prev) {
+                                    warn!("Failed to restore clipboard text: {}", e);
+                                }
                             }
                         }
                     }
                 }
                 WhispEvent::AudioError(_) => {
-                    warn!("Audio processing error received, author has not yet implemented this");
+                    warn!("Audio processing error received");
                 }
             };
         }
 
         // Handle hotkey events
         if let Ok(event) = hotkey_channel.try_recv() {
-            if event.id() == config.read().hotkey().id() && event.state() == HotKeyState::Pressed {
-                let mic_state = match active_recording.take() {
-                    Some(mut recording) => match recording.finish() {
-                        Ok(Some(data)) => match audio_pipeline.submit(data) {
-                            Ok(whisp::process::SubmitResult::Discarded) => MicState::Idle,
-                            Ok(whisp::process::SubmitResult::Sent) => MicState::Processing,
-                            Err(e) => {
-                                error!("Failed to submit audio to processor: {:?}", e);
-                                MicState::Idle
+            if event.id() == hotkey.id() {
+                match event.state() {
+                    HotKeyState::Pressed => {
+                        hotkey_held = true;
+                        let mic_state = match active_recording.take() {
+                            Some(mut recording) => match recording.finish() {
+                                Ok(Some(data)) => match audio_pipeline.submit(data) {
+                                    Ok(SubmitResult::Discarded) => MicState::Idle,
+                                    Ok(SubmitResult::Sent) => MicState::Processing,
+                                    Err(e) => {
+                                        error!("Failed to submit audio to processor: {:?}", e);
+                                        MicState::Idle
+                                    }
+                                },
+                                Ok(None) => {
+                                    warn!("Recording finished but no data was recorded");
+                                    MicState::Idle
+                                }
+                                Err(e) => {
+                                    error!(error = ?e, "Failed to finish recording");
+                                    MicState::Idle
+                                }
+                            },
+                            None => match recorder.start_recording(Some(audio_event_tx.clone())) {
+                                Ok(handle) => {
+                                    active_recording = Some(handle);
+                                    MicState::Activating
+                                }
+                                Err(e) => {
+                                    error!("Failed to start recording: {:?}", e);
+                                    MicState::Idle
+                                }
+                            },
+                        };
+                        event_sender
+                            .send_event(WhispEvent::StateChanged(mic_state))
+                            .ok();
+                    }
+                    HotKeyState::Released => {
+                        hotkey_held = false;
+                        // Execute pending paste if any
+                        if let Some((_text, previous)) = pending_paste.take() {
+                            if let Err(e) = paste(&mut enigo) {
+                                warn!("Failed to paste transcription: {}", e);
                             }
-                        },
-                        Ok(None) => {
-                            warn!("Recording finished but no data was recorded");
-                            MicState::Idle
+                            if let Some(prev) = previous {
+                                if let Err(e) = clipboard.set_text(&prev) {
+                                    warn!("Failed to restore clipboard text: {}", e);
+                                }
+                            }
                         }
-                        Err(e) => {
-                            error!(error = ?e, "Failed to finish recording");
-                            MicState::Idle
-                        }
-                    },
-                    None => match recorder.start_recording(event_sender.clone()) {
-                        Ok(handle) => {
-                            active_recording = Some(handle);
-                            MicState::Activating
-                        }
-                        Err(e) => {
-                            error!("Failed to start recording: {:?}", e);
-                            MicState::Idle
-                        }
-                    },
-                };
-                event_sender
-                    .send_event(WhispEvent::StateChanged(mic_state))
-                    .ok();
+                    }
+                }
             }
         }
     });
@@ -242,8 +354,9 @@ fn paste(enigo: &mut Enigo) -> anyhow::Result<()> {
     let paste_modifier = Key::Control;
 
     const SLEEP_TIME: std::time::Duration = std::time::Duration::from_millis(10);
+    const MODIFIER_SLEEP: std::time::Duration = std::time::Duration::from_millis(20);
     enigo.key(paste_modifier, Press)?;
-    sleep(SLEEP_TIME);
+    sleep(MODIFIER_SLEEP);
     enigo.key(Key::Unicode('v'), Click)?;
     sleep(SLEEP_TIME);
     enigo.key(paste_modifier, Release)?;
