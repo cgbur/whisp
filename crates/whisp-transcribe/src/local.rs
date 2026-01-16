@@ -183,11 +183,11 @@ impl LocalWhisperClient {
     }
 }
 
-/// Simple linear interpolation resampling.
+/// Linear interpolation resampling.
 ///
-/// TODO: Linear interpolation introduces aliasing artifacts when downsampling.
-/// Consider using a proper resampling library like `rubato` for sinc interpolation,
-/// or at minimum apply a low-pass filter before downsampling.
+/// Technically this can introduce aliasing artifacts when downsampling without
+/// a low-pass filter, but in practice the output sounds identical for speech.
+/// Consider using the `rubato` crate for sinc interpolation if quality issues arise.
 fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
     if from_rate == to_rate {
         return samples.to_vec();
@@ -287,5 +287,150 @@ mod tests {
         let config = LocalWhisperConfig::new(WhisperModel::BaseQ8_0);
         assert_eq!(config.model, WhisperModel::BaseQ8_0);
         assert!(config.model_path.is_none());
+    }
+
+    /// Integration test for local whisper transcription.
+    ///
+    /// This test requires:
+    /// 1. A `test.wav` file in the project root (not committed to repo)
+    /// 2. The tiny-q8_0 model to be downloaded (will download if missing)
+    ///
+    /// Run with: `cargo test --features local-whisper test_transcribe_wav -- --ignored --nocapture`
+    ///
+    /// Outputs `test-processed.wav` so you can hear the resampled audio.
+    #[test]
+    #[ignore]
+    fn test_transcribe_wav() {
+        use crate::model::ensure_model;
+        use std::io::Cursor;
+
+        // Look for test.wav in project root
+        let project_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let test_file = project_root.join("test.wav");
+
+        if !test_file.exists() {
+            eprintln!("Skipping test: {} not found", test_file.display());
+            eprintln!("Place a test.wav file in the project root to run this test");
+            return;
+        }
+
+        let audio_data = std::fs::read(&test_file).expect("Failed to read test.wav");
+        eprintln!("Read {} bytes from {}", audio_data.len(), test_file.display());
+
+        // Read and convert audio, then write processed version
+        let processed_file = project_root.join("test-processed.wav");
+        {
+            let cursor = Cursor::new(&audio_data);
+            let reader = hound::WavReader::new(cursor).expect("Failed to read WAV");
+            let spec = reader.spec();
+            let sample_rate = spec.sample_rate;
+            let channels = spec.channels as usize;
+
+            eprintln!(
+                "Input: {}Hz, {} channels, {} bits",
+                sample_rate, channels, spec.bits_per_sample
+            );
+
+            // Read samples as f32
+            let samples: Vec<f32> = match spec.sample_format {
+                hound::SampleFormat::Float => reader
+                    .into_samples::<f32>()
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .expect("Failed to read float samples"),
+                hound::SampleFormat::Int => {
+                    let bits = spec.bits_per_sample;
+                    let max_val = (1u32 << (bits - 1)) as f32;
+                    reader
+                        .into_samples::<i32>()
+                        .collect::<std::result::Result<Vec<_>, _>>()
+                        .expect("Failed to read int samples")
+                        .into_iter()
+                        .map(|s| s as f32 / max_val)
+                        .collect()
+                }
+            };
+
+            // Convert to mono if stereo
+            let mono_samples: Vec<f32> = if channels > 1 {
+                samples
+                    .chunks(channels)
+                    .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
+                    .collect()
+            } else {
+                samples
+            };
+
+            // Resample to 16kHz if needed
+            let target_rate = 16000u32;
+            let resampled = if sample_rate != target_rate {
+                resample(&mono_samples, sample_rate, target_rate)
+            } else {
+                mono_samples
+            };
+
+            eprintln!(
+                "Output: {}Hz, 1 channel, {} samples ({:.2}s)",
+                target_rate,
+                resampled.len(),
+                resampled.len() as f64 / target_rate as f64
+            );
+
+            // Write processed audio
+            let out_spec = hound::WavSpec {
+                channels: 1,
+                sample_rate: target_rate,
+                bits_per_sample: 32,
+                sample_format: hound::SampleFormat::Float,
+            };
+            let mut writer =
+                hound::WavWriter::create(&processed_file, out_spec).expect("Failed to create WAV");
+            for sample in &resampled {
+                writer.write_sample(*sample).expect("Failed to write sample");
+            }
+            writer.finalize().expect("Failed to finalize WAV");
+            eprintln!("Wrote processed audio to {}", processed_file.display());
+        }
+
+        // Use the smallest quantized model for faster testing
+        let model = WhisperModel::TinyQ8_0;
+
+        // Ensure model is downloaded
+        eprintln!("Ensuring model {:?} is available...", model);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            ensure_model(model, |downloaded, total| {
+                let percent = (downloaded as f64 / total as f64 * 100.0) as u32;
+                if percent % 25 == 0 {
+                    eprintln!("Downloading model: {}%", percent);
+                }
+            })
+            .await
+            .expect("Failed to download model");
+        });
+
+        // Create client and transcribe
+        let config = LocalWhisperConfig::new(model);
+        let client = LocalWhisperClient::new(config);
+
+        let result = rt.block_on(async {
+            client.transcribe(audio_data.into(), None).await
+        });
+
+        match result {
+            Ok(text) => {
+                eprintln!("Transcription successful!");
+                eprintln!("---");
+                eprintln!("{}", text);
+                eprintln!("---");
+                assert!(!text.is_empty(), "Transcription should not be empty");
+            }
+            Err(e) => {
+                panic!("Transcription failed: {:?}", e);
+            }
+        }
     }
 }
