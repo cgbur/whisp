@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tracing::debug;
 
-use crate::{Bytes, Result, TranscribeError, Transcriber};
+use super::{Bytes, Result, TranscribeError, Transcriber};
 
 const TRANSCRIPTION_ENDPOINT: &str = "https://api.openai.com/v1/audio/transcriptions";
 const DEFAULT_MODEL: &str = "gpt-4o-mini-transcribe";

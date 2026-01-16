@@ -1,19 +1,22 @@
-[workspace]
-members = ["crates/*"]
-resolver = "3"
-
-[workspace.package]
+[package]
+name = "whisp"
+version = "0.2.0"
 edition = "2024"
+description = "Unobtrusive global speech-to-text"
 license = "MIT"
 repository = "https://github.com/cgbur/whisp"
+homepage = "https://github.com/cgbur/whisp"
+documentation = "https://docs.rs/whisp"
+keywords = ["speech-to-text", "transcribe", "dictation"]
+categories = ["accessibility"]
+readme = "README.md"
 
-[workspace.dependencies]
-# Workspace crates
-whisp-core = { path = "crates/whisp-core" }
-whisp-audio = { path = "crates/whisp-audio" }
-whisp-transcribe = { path = "crates/whisp-transcribe" }
+[[bin]]
+path = "src/whisp.rs"
+name = "whisp"
 
-# Core dependencies
+[dependencies]
+# Core
 anyhow = "1.0"
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
@@ -44,61 +47,22 @@ notify-rust = "4.11"
 tao = "0.30"
 tray-icon = "0.19"
 
-# macOS
-core-foundation = "0.10"
-
-# Dev
-tempfile = "3.13"
-
 # Local whisper (optional)
-sha1 = "0.10"
-whisper-rs = "0.15.1"
-
-[package]
-name = "whisp"
-version = "0.2.0"
-edition.workspace = true
-description = "Unobtrusive global speech-to-text"
-license.workspace = true
-repository.workspace = true
-homepage = "https://github.com/cgbur/whisp"
-documentation = "https://docs.rs/whisp"
-keywords = ["speech-to-text", "transcribe", "dictation"]
-categories = ["accessibility"]
-readme = "README.md"
-
-[[bin]]
-path = "src/whisp.rs"
-name = "whisp"
-
-[dependencies]
-whisp-core.workspace = true
-whisp-audio.workspace = true
-whisp-transcribe.workspace = true
-
-anyhow.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-
-arboard.workspace = true
-enigo.workspace = true
-global-hotkey.workspace = true
-image.workspace = true
-notify-rust.workspace = true
-tao.workspace = true
-tray-icon.workspace = true
+sha1 = { version = "0.10", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation.workspace = true
+core-foundation = "0.10"
+whisper-rs = { version = "0.15.1", optional = true, features = ["tracing_backend", "metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+whisper-rs = { version = "0.15.1", optional = true, features = ["tracing_backend"] }
 
 [dev-dependencies]
-tempfile.workspace = true
+tempfile = "3.13"
 
 [features]
 default = []
-local-whisper = ["whisp-transcribe/local-whisper"]
+local-whisper = ["dep:whisper-rs", "dep:sha1"]
 
 [profile.release-lto]
 inherits = "release"

@@ -8,7 +8,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use tracing::{info, warn};
-use whisp_core::models_dir;
+
+use crate::core::models_dir;
 
 /// Base URL for downloading Whisper models from Hugging Face.
 const MODEL_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";

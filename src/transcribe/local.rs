@@ -13,8 +13,8 @@ use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
 };
 
-use crate::model::{WhisperModel, model_path};
-use crate::{Result, TranscribeError, Transcriber};
+use super::model::{WhisperModel, model_path};
+use super::{Result, TranscribeError, Transcriber};
 
 /// Configuration for the local Whisper transcriber.
 #[derive(Debug, Clone)]
@@ -303,7 +303,7 @@ mod tests {
     fn test_transcribe_wav() {
         use std::io::Cursor;
 
-        use crate::model::ensure_model;
+        use crate::transcribe::model::ensure_model;
 
         // Look for test.wav in project root
         let project_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

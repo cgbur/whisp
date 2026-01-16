@@ -19,7 +19,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavSpec, WavWriter};
 use thiserror::Error;
 use tracing::{error, info};
-use whisp_core::{AudioEvent, MicState, RecordingState};
+
+use crate::core::{AudioEvent, MicState, RecordingState};
 
 /// Errors that can occur during recording.
 #[derive(Debug, Error)]

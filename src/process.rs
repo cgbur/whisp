@@ -6,11 +6,11 @@
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
+use bytes::Bytes;
 use tao::event_loop::EventLoopProxy;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
-use whisp_transcribe::Bytes;
 
 use crate::event::WhispEvent;
 use crate::{Config, MicState, Recording, Transcriber};
