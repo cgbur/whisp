@@ -167,7 +167,7 @@ fn main() -> Result<()> {
                 })
                 .context("Failed to download Whisper model")?;
 
-                let local_config = LocalWhisperConfig::new(model);
+                let local_config = LocalWhisperConfig::new(model).with_coreml(cfg.coreml());
                 Arc::new(LocalWhisperClient::new(local_config))
             }
             #[cfg(not(feature = "local-whisper"))]

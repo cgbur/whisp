@@ -308,6 +308,67 @@ impl WhisperModel {
             format!("{} MiB", mib)
         }
     }
+
+    /// Returns the base model name for CoreML encoder lookup.
+    ///
+    /// CoreML encoders are full-precision models that run on Apple's Neural Engine.
+    /// They work alongside any GGML model (including quantized variants) - the encoder
+    /// runs on ANE while the decoder uses the GGML model on CPU/Metal.
+    ///
+    /// This strips quantization suffixes to find the matching CoreML encoder.
+    /// For example: "base-q8_0" -> "base", "tiny.en-q5_1" -> "tiny.en"
+    pub fn coreml_base_name(&self) -> &'static str {
+        match self {
+            // Tiny variants
+            Self::Tiny | Self::TinyQ5_1 | Self::TinyQ8_0 => "tiny",
+            Self::TinyEn | Self::TinyEnQ5_1 | Self::TinyEnQ8_0 => "tiny.en",
+            // Base variants
+            Self::Base | Self::BaseQ5_1 | Self::BaseQ8_0 => "base",
+            Self::BaseEn | Self::BaseEnQ5_1 | Self::BaseEnQ8_0 => "base.en",
+            // Small variants
+            Self::Small | Self::SmallQ5_1 | Self::SmallQ8_0 => "small",
+            Self::SmallEn | Self::SmallEnQ5_1 | Self::SmallEnQ8_0 | Self::SmallEnTdrz => "small.en",
+            // Medium variants
+            Self::Medium | Self::MediumQ5_0 | Self::MediumQ8_0 => "medium",
+            Self::MediumEn | Self::MediumEnQ5_0 | Self::MediumEnQ8_0 => "medium.en",
+            // Large variants
+            Self::LargeV1 => "large-v1",
+            Self::LargeV2 | Self::LargeV2Q5_0 | Self::LargeV2Q8_0 => "large-v2",
+            Self::LargeV3 | Self::LargeV3Q5_0 => "large-v3",
+            Self::LargeV3Turbo | Self::LargeV3TurboQ5_0 | Self::LargeV3TurboQ8_0 => {
+                "large-v3-turbo"
+            }
+        }
+    }
+
+    /// Returns the CoreML encoder directory name.
+    ///
+    /// This is the name of the extracted .mlmodelc directory that whisper.cpp expects.
+    pub fn coreml_encoder_dirname(&self) -> String {
+        format!("ggml-{}-encoder.mlmodelc", self.coreml_base_name())
+    }
+
+    /// Returns the CoreML encoder zip filename for download.
+    pub fn coreml_encoder_zip_filename(&self) -> String {
+        format!("{}.zip", self.coreml_encoder_dirname())
+    }
+
+    /// Returns the download URL for the CoreML encoder.
+    pub fn coreml_encoder_url(&self) -> String {
+        format!("{}/{}", MODEL_BASE_URL, self.coreml_encoder_zip_filename())
+    }
+
+    /// Returns the approximate size of the CoreML encoder in MiB.
+    pub fn coreml_encoder_size_mib(&self) -> u32 {
+        match self.coreml_base_name() {
+            "tiny" | "tiny.en" => 15,
+            "base" | "base.en" => 38,
+            "small" | "small.en" => 163,
+            "medium" | "medium.en" => 568,
+            "large-v1" | "large-v2" | "large-v3" | "large-v3-turbo" => 1200,
+            _ => 100, // fallback
+        }
+    }
 }
 
 #[allow(clippy::derivable_impls)] // Default is BaseEnQ8_0, not the first variant
@@ -464,6 +525,163 @@ where
     );
 
     download_model(model, progress_callback).await
+}
+
+/// Returns the path where the CoreML encoder should be stored.
+#[cfg(target_os = "macos")]
+pub fn coreml_encoder_path(model: WhisperModel) -> Result<PathBuf> {
+    Ok(models_dir()?.join(model.coreml_encoder_dirname()))
+}
+
+/// Checks if a CoreML encoder exists locally.
+#[cfg(target_os = "macos")]
+pub fn coreml_encoder_exists(model: WhisperModel) -> Result<bool> {
+    let path = coreml_encoder_path(model)?;
+    // Check that the directory exists and contains files
+    Ok(path.is_dir()
+        && path
+            .read_dir()
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false))
+}
+
+/// Downloads and extracts the CoreML encoder for a model.
+#[cfg(target_os = "macos")]
+pub async fn download_coreml_encoder<F>(
+    model: WhisperModel,
+    progress_callback: F,
+) -> Result<PathBuf>
+where
+    F: Fn(u64, u64) + Send + 'static,
+{
+    let final_path = coreml_encoder_path(model)?;
+    let models_dir = models_dir()?;
+
+    // Create models directory if it doesn't exist
+    fs::create_dir_all(&models_dir)
+        .with_context(|| format!("Failed to create models directory: {:?}", models_dir))?;
+
+    let url = model.coreml_encoder_url();
+    info!(model = ?model, url = %url, "Downloading CoreML encoder");
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .with_context(|| format!("Failed to start download from {}", url))?;
+
+    if !response.status().is_success() {
+        anyhow::bail!(
+            "Failed to download CoreML encoder: HTTP {}",
+            response.status()
+        );
+    }
+
+    let total_size = response
+        .content_length()
+        .unwrap_or(model.coreml_encoder_size_mib() as u64 * 1024 * 1024);
+
+    // Download to a temporary file
+    let temp_zip_path = models_dir.join(format!("{}.tmp", model.coreml_encoder_zip_filename()));
+    let mut file = File::create(&temp_zip_path)
+        .with_context(|| format!("Failed to create temp file: {:?}", temp_zip_path))?;
+
+    let mut downloaded: u64 = 0;
+    let mut stream = response.bytes_stream();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.with_context(|| "Failed to read chunk during download")?;
+        file.write_all(&chunk)
+            .with_context(|| "Failed to write chunk to file")?;
+        downloaded += chunk.len() as u64;
+        progress_callback(downloaded, total_size);
+    }
+
+    file.flush().with_context(|| "Failed to flush file")?;
+    drop(file);
+
+    // Extract the zip file
+    info!("Extracting CoreML encoder...");
+    extract_coreml_zip(&temp_zip_path, &models_dir)?;
+
+    // Remove the zip file
+    let _ = fs::remove_file(&temp_zip_path);
+
+    info!(path = ?final_path, "CoreML encoder download and extraction complete");
+    Ok(final_path)
+}
+
+/// Extracts a CoreML encoder zip file to the target directory.
+#[cfg(target_os = "macos")]
+fn extract_coreml_zip(zip_path: &PathBuf, target_dir: &PathBuf) -> Result<()> {
+    use std::io::BufReader;
+
+    let file =
+        File::open(zip_path).with_context(|| format!("Failed to open zip file: {:?}", zip_path))?;
+    let reader = BufReader::new(file);
+    let mut archive = zip::ZipArchive::new(reader)
+        .with_context(|| format!("Failed to read zip archive: {:?}", zip_path))?;
+
+    for i in 0..archive.len() {
+        let mut file = archive
+            .by_index(i)
+            .with_context(|| format!("Failed to access file {} in archive", i))?;
+
+        let outpath = match file.enclosed_name() {
+            Some(path) => target_dir.join(path),
+            None => continue,
+        };
+
+        if file.is_dir() {
+            fs::create_dir_all(&outpath)
+                .with_context(|| format!("Failed to create directory: {:?}", outpath))?;
+        } else {
+            if let Some(parent) = outpath.parent() {
+                if !parent.exists() {
+                    fs::create_dir_all(parent).with_context(|| {
+                        format!("Failed to create parent directory: {:?}", parent)
+                    })?;
+                }
+            }
+            let mut outfile = File::create(&outpath)
+                .with_context(|| format!("Failed to create file: {:?}", outpath))?;
+            std::io::copy(&mut file, &mut outfile)
+                .with_context(|| format!("Failed to extract file: {:?}", outpath))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Ensures a CoreML encoder is available locally, downloading it if necessary.
+#[cfg(target_os = "macos")]
+pub async fn ensure_coreml_encoder<F>(model: WhisperModel, progress_callback: F) -> Result<PathBuf>
+where
+    F: Fn(u64, u64) + Send + 'static,
+{
+    let path = coreml_encoder_path(model)?;
+
+    if coreml_encoder_exists(model)? {
+        info!(model = ?model, "CoreML encoder exists");
+        return Ok(path);
+    }
+
+    let size_mib = model.coreml_encoder_size_mib();
+    let size_str = if size_mib >= 1024 {
+        format!("{:.1} GiB", size_mib as f64 / 1024.0)
+    } else {
+        format!("{} MiB", size_mib)
+    };
+
+    warn!(
+        model = ?model,
+        size = %size_str,
+        "CoreML encoder not found locally, downloading..."
+    );
+
+    download_coreml_encoder(model, progress_callback).await
 }
 
 #[cfg(test)]

@@ -14,6 +14,8 @@ use whisper_rs::{
 };
 
 use super::model::{WhisperModel, model_path};
+#[cfg(target_os = "macos")]
+use super::model::{coreml_encoder_exists, coreml_encoder_path, ensure_coreml_encoder};
 use super::{Result, TranscribeError, Transcriber};
 
 /// Configuration for the local Whisper transcriber.
@@ -23,6 +25,9 @@ pub struct LocalWhisperConfig {
     pub model: WhisperModel,
     /// Optional override path to the model file.
     pub model_path: Option<PathBuf>,
+    /// Enable CoreML acceleration on macOS.
+    /// When enabled, downloads the CoreML encoder for ~3x faster encoding via Apple Neural Engine.
+    pub coreml: bool,
 }
 
 impl LocalWhisperConfig {
@@ -31,12 +36,19 @@ impl LocalWhisperConfig {
         Self {
             model,
             model_path: None,
+            coreml: cfg!(target_os = "macos"), // Default to true on macOS
         }
     }
 
     /// Create a config with a custom model path.
     pub fn with_model_path(mut self, path: PathBuf) -> Self {
         self.model_path = Some(path);
+        self
+    }
+
+    /// Enable or disable CoreML acceleration (macOS only).
+    pub fn with_coreml(mut self, enabled: bool) -> Self {
+        self.coreml = enabled;
         self
     }
 }
@@ -74,6 +86,58 @@ impl LocalWhisperClient {
             config,
             instance: Mutex::new(None),
         }
+    }
+
+    /// Ensure CoreML encoder is available on macOS.
+    ///
+    /// This downloads the CoreML encoder if it doesn't exist and CoreML is enabled.
+    /// Must be called before loading the model since whisper.cpp looks for the
+    /// encoder at model load time.
+    #[cfg(target_os = "macos")]
+    async fn ensure_coreml_setup(&self) -> Result<()> {
+        if !self.config.coreml {
+            return Ok(());
+        }
+
+        // Check if CoreML encoder already exists
+        if coreml_encoder_exists(self.config.model)
+            .map_err(|e| TranscribeError::TranscriptionFailed(e.to_string()))?
+        {
+            info!(
+                model = ?self.config.model,
+                path = ?coreml_encoder_path(self.config.model).ok(),
+                "CoreML encoder available"
+            );
+            return Ok(());
+        }
+
+        // Download the CoreML encoder
+        info!(
+            model = ?self.config.model,
+            "Downloading CoreML encoder for faster transcription..."
+        );
+
+        ensure_coreml_encoder(self.config.model, |downloaded, total| {
+            let percent = (downloaded as f64 / total as f64 * 100.0) as u32;
+            if percent % 10 == 0 {
+                debug!("CoreML encoder download: {}%", percent);
+            }
+        })
+        .await
+        .map_err(|e| {
+            TranscribeError::TranscriptionFailed(format!(
+                "Failed to download CoreML encoder: {}",
+                e
+            ))
+        })?;
+
+        Ok(())
+    }
+
+    /// No-op on non-macOS platforms.
+    #[cfg(not(target_os = "macos"))]
+    async fn ensure_coreml_setup(&self) -> Result<()> {
+        Ok(())
     }
 
     /// Get or initialize the whisper instance, returning a guard.
@@ -221,6 +285,9 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
 #[async_trait]
 impl Transcriber for LocalWhisperClient {
     async fn transcribe(&self, audio: Bytes, language: Option<&str>) -> Result<String> {
+        // Ensure CoreML encoder is available (macOS only, downloads if needed)
+        self.ensure_coreml_setup().await?;
+
         // Convert audio to the format whisper expects
         let samples = self.convert_audio(&audio)?;
 
