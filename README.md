@@ -52,7 +52,8 @@ cargo install whisp --features local-whisper
 - **Linux**: ALSA, GTK3, and X11 libraries are required. A `shell.nix` is provided
   for Nix users that includes all dependencies.
 
-The local backend uses Metal GPU acceleration on Mac for fast transcription.
+The local backend uses Metal GPU acceleration on Mac for fast transcription, with
+automatic CoreML support for ~3x faster encoding via the Apple Neural Engine.
 
 ## Configuration
 
@@ -95,6 +96,7 @@ multilingual support, use a non-English model like `base-q8_0` or `small-q8_0`.
 | `hotkey`            | `shift+super+Semicolon`  | Global hotkey to trigger recording             |
 | `openai_key`        | (required for openai)    | Your OpenAI API key                            |
 | `local_model`       | `base.en-q8_0`           | Local Whisper model (see table below)          |
+| `coreml`            | `true`                   | Enable CoreML acceleration (macOS only)        |
 | `language`          | (none)                   | Language hint for transcription (e.g., "en")   |
 | `model`             | `gpt-4o-mini-transcribe` | OpenAI transcription model                     |
 | `restore_clipboard` | `false`                  | Restore clipboard contents after pasting       |
@@ -161,11 +163,27 @@ Model names must match exactly as shown below.
 
 - **Document Writing**: Speak freely to draft large amounts of text quickly.
 
-## Future Enhancements
+## CoreML Acceleration (macOS)
 
-- **CoreML Support**: The local backend could be enhanced to use CoreML for ~3x
-  faster encoder performance on Mac via the Apple Neural Engine. This would
-  require downloading additional encoder files.
+On macOS, the local backend automatically uses CoreML to run the encoder on
+Apple's Neural Engine, providing ~3x faster encoding performance. This is
+enabled by default.
+
+On first use, whisp downloads a pre-built CoreML encoder model from HuggingFace
+(15-1200 MiB depending on model size). The first transcription after launch may
+be slow as macOS compiles the model for the Neural Engine, but subsequent
+transcriptions are fast. Since whisp is designed to run in the background
+indefinitely, this one-time warmup cost is negligible in practice.
+
+CoreML encoders work with all GGML models, including quantized variants. The
+encoder runs on the Neural Engine while the decoder uses the GGML model on
+CPU/Metal.
+
+To disable CoreML and use Metal-only acceleration:
+
+```toml
+coreml = false
+```
 
 ## License
 
