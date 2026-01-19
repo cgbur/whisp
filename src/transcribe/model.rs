@@ -518,7 +518,7 @@ where
         let _ = fs::remove_file(&path);
     }
 
-    warn!(
+    info!(
         model = ?model,
         size = %model.size_human(),
         "Model not found locally, downloading..."
@@ -675,7 +675,7 @@ where
         format!("{} MiB", size_mib)
     };
 
-    warn!(
+    info!(
         model = ?model,
         size = %size_str,
         "CoreML encoder not found locally, downloading..."
