@@ -1,6 +1,6 @@
 [package]
 name = "whisp"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Unobtrusive global speech-to-text"
 license = "MIT"
@@ -35,7 +35,7 @@ toml = "0.8"
 
 # HTTP
 bytes = "1"
-reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
+reqwest = { version = "0.13", features = ["json", "multipart", "stream"] }
 futures-util = "0.3"
 
 # UI/System integration
@@ -53,7 +53,7 @@ sha1 = { version = "0.10", optional = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
 whisper-rs = { version = "0.15.1", optional = true, features = ["tracing_backend", "metal", "coreml"] }
-zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
+zip = { version = "7", optional = true, default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 whisper-rs = { version = "0.15.1", optional = true, features = ["tracing_backend"] }
