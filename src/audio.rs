@@ -246,10 +246,10 @@ impl RecordingHandle {
 
 impl Drop for RecordingHandle {
     fn drop(&mut self) {
-        if self.buffer.is_some() {
-            if let Err(e) = self.finish() {
-                error!("failed to finalize recording: {}", e);
-            }
+        if self.buffer.is_some()
+            && let Err(e) = self.finish()
+        {
+            error!("failed to finalize recording: {}", e);
         }
     }
 }
@@ -288,11 +288,11 @@ fn write_data(
         }
     }
 
-    if let Ok(mut guard) = writer.try_lock() {
-        if let Some(writer) = guard.as_mut() {
-            for &sample in data.iter() {
-                writer.write_sample(sample).ok();
-            }
+    if let Ok(mut guard) = writer.try_lock()
+        && let Some(writer) = guard.as_mut()
+    {
+        for &sample in data.iter() {
+            writer.write_sample(sample).ok();
         }
     }
 }

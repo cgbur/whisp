@@ -322,10 +322,10 @@ impl Transcriber for LocalWhisperClient {
 
         let mut result = String::new();
         for i in 0..num_segments {
-            if let Some(segment) = instance.state.get_segment(i) {
-                if let Ok(text) = segment.to_str_lossy() {
-                    result.push_str(&text);
-                }
+            if let Some(segment) = instance.state.get_segment(i)
+                && let Ok(text) = segment.to_str_lossy()
+            {
+                result.push_str(&text);
             }
         }
 
@@ -478,7 +478,7 @@ mod tests {
         rt.block_on(async {
             ensure_model(model, |downloaded, total| {
                 let percent = (downloaded as f64 / total as f64 * 100.0) as u32;
-                if percent % 25 == 0 {
+                if percent.is_multiple_of(25) {
                     eprintln!("Downloading model: {}%", percent);
                 }
             })
