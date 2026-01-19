@@ -61,6 +61,11 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_model: Option<String>,
 
+    /// Enable CoreML acceleration on macOS (uses Apple Neural Engine for ~3x faster encoding)
+    /// Only used when backend is "local" on macOS
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub coreml: bool,
+
     /// Preferred language for transcription (ISO 639-1 code)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
@@ -131,6 +136,7 @@ impl Default for Config {
             backend: TranscriptionBackend::default(),
             openai_key: None,
             local_model: None,
+            coreml: true,
             language: None,
             model: None,
             restore_clipboard: false,
@@ -156,6 +162,11 @@ impl Config {
     /// Get the local whisper model name
     pub fn local_model(&self) -> Option<&str> {
         self.local_model.as_deref()
+    }
+
+    /// Check if CoreML is enabled
+    pub fn coreml(&self) -> bool {
+        self.coreml
     }
 
     /// Get the preferred language

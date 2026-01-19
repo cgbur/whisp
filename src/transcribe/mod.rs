@@ -16,6 +16,8 @@ pub use bytes::Bytes;
 pub use local::{LocalWhisperClient, LocalWhisperConfig};
 #[cfg(feature = "local-whisper")]
 pub use model::{WhisperModel, download_model, ensure_model, model_exists, model_path};
+#[cfg(all(feature = "local-whisper", target_os = "macos"))]
+pub use model::{coreml_encoder_exists, coreml_encoder_path, ensure_coreml_encoder};
 pub use openai::{OpenAIClient, OpenAIConfig};
 use thiserror::Error;
 
