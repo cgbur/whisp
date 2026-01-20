@@ -7,6 +7,7 @@ use std::thread::sleep;
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 use enigo::Enigo;
+use global_hotkey::hotkey::{HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
@@ -268,7 +269,7 @@ fn main() -> Result<()> {
                             pending_paste = Some((text.clone(), previous));
                         } else {
                             // Paste immediately
-                            if let Err(e) = paste(&mut enigo) {
+                            if let Err(e) = paste(&mut enigo, &hotkey) {
                                 warn!("Failed to paste transcription: {}", e);
                             }
                             if let Some(prev) = previous
@@ -338,7 +339,7 @@ fn main() -> Result<()> {
                     hotkey_held = false;
                     // Execute pending paste if any
                     if let Some((_text, previous)) = pending_paste.take() {
-                        if let Err(e) = paste(&mut enigo) {
+                        if let Err(e) = paste(&mut enigo, &hotkey) {
                             warn!("Failed to paste transcription: {}", e);
                         }
                         if let Some(prev) = previous
@@ -353,7 +354,7 @@ fn main() -> Result<()> {
     });
 }
 
-fn paste(enigo: &mut Enigo) -> anyhow::Result<()> {
+fn paste(enigo: &mut Enigo, hotkey: &HotKey) -> anyhow::Result<()> {
     use enigo::Direction::{Click, Press, Release};
     use enigo::{Key, Keyboard};
 
@@ -364,6 +365,23 @@ fn paste(enigo: &mut Enigo) -> anyhow::Result<()> {
 
     const SLEEP_TIME: std::time::Duration = std::time::Duration::from_millis(10);
     const MODIFIER_SLEEP: std::time::Duration = std::time::Duration::from_millis(20);
+
+    // Release any modifiers from the hotkey that might still be held by the user
+    // This prevents e.g. Cmd+Shift+V (Paste and Match Style) instead of Cmd+V
+    if hotkey.mods.contains(Modifiers::SHIFT) {
+        enigo.key(Key::Shift, Release)?;
+    }
+    if hotkey.mods.contains(Modifiers::ALT) {
+        enigo.key(Key::Alt, Release)?;
+    }
+    if hotkey.mods.contains(Modifiers::CONTROL) {
+        enigo.key(Key::Control, Release)?;
+    }
+    if hotkey.mods.contains(Modifiers::SUPER) {
+        enigo.key(Key::Meta, Release)?;
+    }
+    sleep(SLEEP_TIME);
+
     enigo.key(paste_modifier, Press)?;
     sleep(MODIFIER_SLEEP);
     enigo.key(Key::Unicode('v'), Click)?;
