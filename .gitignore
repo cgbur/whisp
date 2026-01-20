@@ -3,6 +3,7 @@
 Cargo.lock
 test.wav
 TODO.md
+.env
 
 # Nix (keep shell.nix, ignore flakes)
 flake.nix
