@@ -27,33 +27,35 @@ Design principles:
 
 ## Installation
 
-### Standard Installation (OpenAI API)
+### Recommended: Local Whisper (No API Key Required)
 
-```sh
-cargo install whisp
-whisp
-# if cargo bin is not in your path
-~/.cargo/bin/whisp
-```
-
-### With Local Whisper Support
-
-To use local Whisper models (no internet or API key required), build with the
-`local-whisper` feature:
+The best experience is with local Whisper models - everything runs on your
+machine with no API key or internet connection needed. Just install and go:
 
 ```sh
 cargo install whisp --features local-whisper
+whisp
 ```
 
-**Requirements for local whisper:**
+On first launch, whisp will automatically download the default model
+(large-v3-turbo-q8_0, ~834 MiB) and start working immediately.
 
-- **CMake** must be installed (for building whisper.cpp)
-- **Linux**: ALSA, GTK3, and X11 libraries are required. A `shell.nix` is
-  provided for Nix users that includes all dependencies.
+**Requirements:** CMake must be installed (for building whisper.cpp). On Linux,
+ALSA, GTK3, and X11 libraries are also required - a `shell.nix` is provided for
+Nix users.
 
-The local backend uses Metal GPU acceleration on Mac for fast transcription,
-with automatic CoreML support for ~3x faster encoding via the Apple Neural
-Engine.
+On macOS, Metal GPU acceleration is used automatically, with CoreML support for
+~3x faster encoding via the Apple Neural Engine.
+
+### Alternative: OpenAI API
+
+If you prefer cloud transcription or can't build local whisper:
+
+```sh
+cargo install whisp
+```
+
+This requires an OpenAI API key configured in `whisp.toml`.
 
 ## Configuration
 
@@ -61,40 +63,39 @@ Configuration is managed through a `whisp.toml` file located in your system's
 configuration directory. The whisp tray menu has an option to copy the
 configuration file path to the clipboard.
 
+### Example: Local Whisper Backend
+
+When installed with `--features local-whisper`, whisp works with zero
+configuration. Optionally customize with:
+
+```toml
+local_model = "large-v3-turbo-q8_0"
+```
+
+On first launch, the model is automatically downloaded (~834 MiB for
+large-v3-turbo-q8_0). The large-v3-turbo model offers excellent transcription
+quality and runs fast on modern hardware, especially MacBooks with Metal/CoreML
+acceleration.
+
+**Quick start:** For faster initial setup, use a smaller model like
+`tiny.en-q8_0` (~42 MiB) or `base.en-q8_0` (~78 MiB).
+
 ### Example: OpenAI Backend
 
 ```toml
-backend = "openai"
-hotkey = "shift+super+Semicolon"
 openai_key = "your-api-key"
+hotkey = "shift+super+Semicolon"
 language = "en"
 model = "gpt-4o-mini-transcribe"
 restore_clipboard = true
 auto_paste = true
 ```
 
-### Example: Local Whisper Backend
-
-```toml
-backend = "local"
-local_model = "large-v3-turbo-q8_0"
-hotkey = "shift+super+Semicolon"
-language = "en"
-```
-
-On first launch with local backend, the model will be automatically downloaded
-(~834 MiB for large-v3-turbo-q8_0). The large-v3-turbo model offers excellent
-transcription quality and runs fast on modern hardware, especially MacBooks with
-Metal/CoreML acceleration.
-
-**Quick start:** If you just want to test whisp, use a smaller model like
-`tiny.en-q8_0` (~42 MiB) or `base.en-q8_0` (~78 MiB) for faster initial setup.
-
 ### Configuration Options
 
 | Option              | Default                  | Description                                    |
 | ------------------- | ------------------------ | ---------------------------------------------- |
-| `backend`           | `openai`                 | Transcription backend: `openai` or `local`     |
+| `backend`           | (depends on build)       | Transcription backend: `openai` or `local`     |
 | `hotkey`            | `shift+super+Semicolon`  | Global hotkey to trigger recording             |
 | `openai_key`        | (required for openai)    | Your OpenAI API key                            |
 | `local_model`       | `large-v3-turbo-q8_0`    | Local Whisper model (see table below)          |
@@ -105,6 +106,9 @@ Metal/CoreML acceleration.
 | `auto_paste`        | `true`                   | Automatically paste transcription              |
 | `discard_duration`  | `0.5`                    | Discard recordings shorter than this (seconds) |
 | `retries`           | `5`                      | Number of retries on API failure               |
+
+The `backend` default is `local` when built with `--features local-whisper`,
+otherwise `openai`.
 
 ### Available Local Models
 

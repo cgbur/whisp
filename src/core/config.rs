@@ -15,14 +15,27 @@ use tracing::warn;
 use crate::APP_NAME;
 
 /// Transcription backend to use.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TranscriptionBackend {
     /// Use OpenAI's Whisper API (requires API key)
-    #[default]
     OpenAI,
     /// Use local Whisper model (requires local-whisper feature)
     Local,
+}
+
+#[allow(clippy::derivable_impls)] // Conditional default based on feature flag
+impl Default for TranscriptionBackend {
+    fn default() -> Self {
+        #[cfg(feature = "local-whisper")]
+        {
+            TranscriptionBackend::Local
+        }
+        #[cfg(not(feature = "local-whisper"))]
+        {
+            TranscriptionBackend::OpenAI
+        }
+    }
 }
 
 /// Returns the default data directory for whisp.
@@ -39,7 +52,7 @@ pub fn models_dir() -> Result<PathBuf> {
 }
 
 fn is_default_backend(v: &TranscriptionBackend) -> bool {
-    *v == TranscriptionBackend::OpenAI
+    *v == TranscriptionBackend::default()
 }
 
 /// Core configuration structure for the application.
