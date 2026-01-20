@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use crate::event::WhispEvent;
-use crate::{Config, MicState, Recording, Transcriber};
+use crate::{Config, Recording, Transcriber};
 
 /// Processing pipeline for audio data.
 pub struct AudioPipeline {
@@ -173,9 +173,8 @@ fn start_results_collector(
                         retries, error
                     );
                     event_sender
-                        .send_event(WhispEvent::StateChanged(MicState::Idle))
+                        .send_event(WhispEvent::TranscriptionFailed(data))
                         .ok();
-                    event_sender.send_event(WhispEvent::AudioError(data)).ok();
                 }
                 Err(e) => {
                     error!("Error joining audio handler: {:?}", e);

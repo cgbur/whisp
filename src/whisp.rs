@@ -233,9 +233,11 @@ fn main() -> Result<()> {
                     icon_tray.as_ref().map(|i| i.set_icon(Some(state.icon())));
                 }
                 WhispEvent::TranscriptReady(text) => {
-                    event_sender
-                        .send_event(WhispEvent::StateChanged(MicState::Idle))
-                        .ok();
+                    if active_recording.is_none() {
+                        event_sender
+                            .send_event(WhispEvent::StateChanged(MicState::Idle))
+                            .ok();
+                    }
 
                     let config = config.read().unwrap();
                     info!(
@@ -276,6 +278,14 @@ fn main() -> Result<()> {
                             }
                         }
                     }
+                }
+                WhispEvent::TranscriptionFailed(data) => {
+                    if active_recording.is_none() {
+                        event_sender
+                            .send_event(WhispEvent::StateChanged(MicState::Idle))
+                            .ok();
+                    }
+                    warn!(bytes = data.len(), "Transcription failed after retries");
                 }
                 WhispEvent::AudioError(_) => {
                     warn!("Audio processing error received");

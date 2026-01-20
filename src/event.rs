@@ -9,6 +9,8 @@ pub enum WhispEvent {
     StateChanged(MicState),
     /// A transcription is ready
     TranscriptReady(String),
+    /// Transcription failed after retries
+    TranscriptionFailed(Vec<u8>),
     /// An error occurred during audio processing
     AudioError(Vec<u8>),
 }
