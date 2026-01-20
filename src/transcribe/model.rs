@@ -371,10 +371,10 @@ impl WhisperModel {
     }
 }
 
-#[allow(clippy::derivable_impls)] // Default is BaseEnQ8_0, not the first variant
+#[allow(clippy::derivable_impls)] // Default is LargeV3TurboQ8_0, not the first variant
 impl Default for WhisperModel {
     fn default() -> Self {
-        Self::BaseEnQ8_0
+        Self::LargeV3TurboQ8_0
     }
 }
 
@@ -726,6 +726,6 @@ mod tests {
 
     #[test]
     fn test_default_model() {
-        assert_eq!(WhisperModel::default(), WhisperModel::BaseEnQ8_0);
+        assert_eq!(WhisperModel::default(), WhisperModel::LargeV3TurboQ8_0);
     }
 }

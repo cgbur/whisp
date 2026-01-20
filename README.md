@@ -4,8 +4,7 @@ A lightweight desktop speech-to-text tool that supports both OpenAI's
 transcription API and local Whisper models. Whisp provides a simple interface
 for converting speech to text with minimal resource overhead.
 
-[![Crates.io][crates-badge]][crates-url]
-[![MIT licensed][mit-badge]][mit-url]
+[![Crates.io][crates-badge]][crates-url] [![MIT licensed][mit-badge]][mit-url]
 
 [crates-badge]: https://img.shields.io/crates/v/whisp.svg
 [crates-url]: https://crates.io/crates/whisp
@@ -49,11 +48,12 @@ cargo install whisp --features local-whisper
 **Requirements for local whisper:**
 
 - **CMake** must be installed (for building whisper.cpp)
-- **Linux**: ALSA, GTK3, and X11 libraries are required. A `shell.nix` is provided
-  for Nix users that includes all dependencies.
+- **Linux**: ALSA, GTK3, and X11 libraries are required. A `shell.nix` is
+  provided for Nix users that includes all dependencies.
 
-The local backend uses Metal GPU acceleration on Mac for fast transcription, with
-automatic CoreML support for ~3x faster encoding via the Apple Neural Engine.
+The local backend uses Metal GPU acceleration on Mac for fast transcription,
+with automatic CoreML support for ~3x faster encoding via the Apple Neural
+Engine.
 
 ## Configuration
 
@@ -77,16 +77,18 @@ auto_paste = true
 
 ```toml
 backend = "local"
-local_model = "base.en-q8_0"
+local_model = "large-v3-turbo-q8_0"
 hotkey = "shift+super+Semicolon"
 language = "en"
 ```
 
 On first launch with local backend, the model will be automatically downloaded
-(~78 MiB for base.en-q8_0).
+(~834 MiB for large-v3-turbo-q8_0). The large-v3-turbo model offers excellent
+transcription quality and runs fast on modern hardware, especially MacBooks with
+Metal/CoreML acceleration.
 
-**Note:** The default model (`base.en-q8_0`) is English-only. If you need
-multilingual support, use a non-English model like `base-q8_0` or `small-q8_0`.
+**Quick start:** If you just want to test whisp, use a smaller model like
+`tiny.en-q8_0` (~42 MiB) or `base.en-q8_0` (~78 MiB) for faster initial setup.
 
 ### Configuration Options
 
@@ -95,7 +97,7 @@ multilingual support, use a non-English model like `base-q8_0` or `small-q8_0`.
 | `backend`           | `openai`                 | Transcription backend: `openai` or `local`     |
 | `hotkey`            | `shift+super+Semicolon`  | Global hotkey to trigger recording             |
 | `openai_key`        | (required for openai)    | Your OpenAI API key                            |
-| `local_model`       | `base.en-q8_0`           | Local Whisper model (see table below)          |
+| `local_model`       | `large-v3-turbo-q8_0`    | Local Whisper model (see table below)          |
 | `coreml`            | `true`                   | Enable CoreML acceleration (macOS only)        |
 | `language`          | (none)                   | Language hint for transcription (e.g., "en")   |
 | `model`             | `gpt-4o-mini-transcribe` | OpenAI transcription model                     |
@@ -106,45 +108,46 @@ multilingual support, use a non-English model like `base-q8_0` or `small-q8_0`.
 
 ### Available Local Models
 
-Models are downloaded from [ggerganov/whisper.cpp on HuggingFace](https://huggingface.co/ggerganov/whisper.cpp).
-Model names must match exactly as shown below.
+Models are downloaded from [ggerganov/whisper.cpp on
+HuggingFace](https://huggingface.co/ggerganov/whisper.cpp). Model names must
+match exactly as shown below.
 
-| Model                 | Size    | Notes                     |
-| --------------------- | ------- | ------------------------- |
-| `tiny`                | 75 MiB  | Fastest                   |
-| `tiny-q5_1`           | 31 MiB  |                           |
-| `tiny-q8_0`           | 42 MiB  |                           |
-| `tiny.en`             | 75 MiB  | English-only              |
-| `tiny.en-q5_1`        | 31 MiB  |                           |
-| `tiny.en-q8_0`        | 42 MiB  |                           |
-| `base`                | 142 MiB |                           |
-| `base-q5_1`           | 57 MiB  |                           |
-| `base-q8_0`           | 78 MiB  |                           |
-| `base.en`             | 142 MiB | English-only              |
-| `base.en-q5_1`        | 57 MiB  |                           |
-| `base.en-q8_0`        | 78 MiB  | **Default**, English-only |
-| `small`               | 466 MiB |                           |
-| `small-q5_1`          | 181 MiB |                           |
-| `small-q8_0`          | 252 MiB |                           |
-| `small.en`            | 466 MiB | English-only              |
-| `small.en-q5_1`       | 181 MiB |                           |
-| `small.en-q8_0`       | 252 MiB |                           |
-| `small.en-tdrz`       | 465 MiB | Tinydiarize               |
-| `medium`              | 1.5 GiB |                           |
-| `medium-q5_0`         | 514 MiB |                           |
-| `medium-q8_0`         | 785 MiB |                           |
-| `medium.en`           | 1.5 GiB | English-only              |
-| `medium.en-q5_0`      | 514 MiB |                           |
-| `medium.en-q8_0`      | 785 MiB |                           |
-| `large-v1`            | 2.9 GiB |                           |
-| `large-v2`            | 2.9 GiB |                           |
-| `large-v2-q5_0`       | 1.1 GiB |                           |
-| `large-v2-q8_0`       | 1.5 GiB |                           |
-| `large-v3`            | 2.9 GiB |                           |
-| `large-v3-q5_0`       | 1.1 GiB |                           |
-| `large-v3-turbo`      | 1.5 GiB | Best speed/quality        |
-| `large-v3-turbo-q5_0` | 547 MiB |                           |
-| `large-v3-turbo-q8_0` | 834 MiB |                           |
+| Model                 | Size    | Notes              |
+| --------------------- | ------- | ------------------ |
+| `tiny`                | 75 MiB  | Fastest            |
+| `tiny-q5_1`           | 31 MiB  |                    |
+| `tiny-q8_0`           | 42 MiB  |                    |
+| `tiny.en`             | 75 MiB  | English-only       |
+| `tiny.en-q5_1`        | 31 MiB  |                    |
+| `tiny.en-q8_0`        | 42 MiB  |                    |
+| `base`                | 142 MiB |                    |
+| `base-q5_1`           | 57 MiB  |                    |
+| `base-q8_0`           | 78 MiB  |                    |
+| `base.en`             | 142 MiB | English-only       |
+| `base.en-q5_1`        | 57 MiB  |                    |
+| `base.en-q8_0`        | 78 MiB  | English-only       |
+| `small`               | 466 MiB |                    |
+| `small-q5_1`          | 181 MiB |                    |
+| `small-q8_0`          | 252 MiB |                    |
+| `small.en`            | 466 MiB | English-only       |
+| `small.en-q5_1`       | 181 MiB |                    |
+| `small.en-q8_0`       | 252 MiB |                    |
+| `small.en-tdrz`       | 465 MiB | Tinydiarize        |
+| `medium`              | 1.5 GiB |                    |
+| `medium-q5_0`         | 514 MiB |                    |
+| `medium-q8_0`         | 785 MiB |                    |
+| `medium.en`           | 1.5 GiB | English-only       |
+| `medium.en-q5_0`      | 514 MiB |                    |
+| `medium.en-q8_0`      | 785 MiB |                    |
+| `large-v1`            | 2.9 GiB |                    |
+| `large-v2`            | 2.9 GiB |                    |
+| `large-v2-q5_0`       | 1.1 GiB |                    |
+| `large-v2-q8_0`       | 1.5 GiB |                    |
+| `large-v3`            | 2.9 GiB |                    |
+| `large-v3-q5_0`       | 1.1 GiB |                    |
+| `large-v3-turbo`      | 1.5 GiB | Best speed/quality |
+| `large-v3-turbo-q5_0` | 547 MiB |                    |
+| `large-v3-turbo-q8_0` | 834 MiB | **Default**        |
 
 ## Usage
 
