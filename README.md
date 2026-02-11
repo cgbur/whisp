@@ -1,5 +1,9 @@
 # Whisp
 
+> **Status:** This project has largely been superseded by
+> [cjpais/Handy](https://github.com/cjpais/Handy), which supports great local
+> models.
+
 A lightweight desktop speech-to-text tool that supports both OpenAI's
 transcription API and local Whisper models. Whisp provides a simple interface
 for converting speech to text with minimal resource overhead.
